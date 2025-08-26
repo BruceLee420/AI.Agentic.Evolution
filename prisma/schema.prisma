@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  ref       String   @unique
+  name      String
+  email     String
+  phone     String
+  vehicle   String
+  service   ServiceTier
+  startsAt  DateTime
+  location  String?
+  notes     String?
+  status    Status   @default(NEW)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ServiceTier {
+  BASIC
+  PREMIUM
+  LUXURY
+}
+
+enum Status {
+  NEW
+  CONFIRMED
+  COMPLETED
+  CANCELED
+}
+
+model ServiceConfig {
+  id             Int    @id @default(1)
+  acceptBookings Boolean @default(true)
+  basicPrice     Int
+  premiumPrice   Int
+  luxuryPrice    Int
+}
