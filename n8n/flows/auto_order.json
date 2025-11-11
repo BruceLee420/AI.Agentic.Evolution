@@ -1,0 +1,199 @@
+{
+  "name": "BudSense Auto-Reserve",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "budsense/reserve",
+        "options": {}
+      },
+      "id": "Webhook_Entry",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "={{$json[\"apiBase\"] || 'http://backend:8000/orders/reserve'}}",
+        "options": {},
+        "sendBody": true,
+        "jsonParameters": true,
+        "options": {
+          "bodyContentType": "json"
+        }
+      },
+      "id": "Reserve_Order",
+      "name": "Reserve Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "reservations@budsense.ai",
+        "toEmail": "={{$json[\"customerEmail\"]}}",
+        "subject": "BudSense.AI Reservation",
+        "text": "Your stash is locked and clean-certified. Show this email when you arrive!",
+        "options": {}
+      },
+      "id": "Send_Email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 2,
+      "position": [
+        820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "from": "+15555550123",
+        "to": "={{$json[\"customerPhone\"]}}",
+        "message": "BudSense.AI: Your reserve is confirmed. Tap the link to pick up when ready!"
+      },
+      "id": "Send_SMS",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        820,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ],
+        "mode": "everyDay"
+      },
+      "id": "Daily_Schedule",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "={{$json[\"apiBase\"] || 'http://backend:8000/menus/sync'}}",
+        "options": {},
+        "method": "POST",
+        "sendBody": true,
+        "jsonParameters": true,
+        "options": {
+          "bodyContentType": "json"
+        },
+        "bodyParametersJson": "{\n  \"location\": {\n    \"lat\": 37.7749,\n    \"lon\": -122.4194\n  },\n  \"radius_miles\": 60\n}"
+      },
+      "id": "Sync_Menus",
+      "name": "Sync Menus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        520,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "url": "={{$json[\"apiBase\"] || 'http://backend:8000/social/daily-refresh'}}",
+        "options": {},
+        "method": "POST",
+        "sendBody": true,
+        "jsonParameters": true,
+        "options": {
+          "bodyContentType": "json"
+        },
+        "bodyParametersJson": "{\n  \"highlight_strains\": [\n    \"Gelato 41\",\n    \"Zkittlez\"\n  ]\n}"
+      },
+      "id": "Refresh_Social",
+      "name": "Refresh Social",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        820,
+        40
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Reserve Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Sync Menus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Menus": {
+      "main": [
+        [
+          {
+            "node": "Refresh Social",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve Order": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": "DEFAULT",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "BudSense",
+      "name": "BudSense"
+    }
+  ],
+  "id": "BudSenseAutoReserve",
+  "active": false,
+  "versionId": "1"
+}

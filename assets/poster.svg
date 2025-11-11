@@ -1,0 +1,55 @@
+<svg width="1080" height="1350" viewBox="0 0 1080 1350" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1080" y2="1350" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220" />
+      <stop offset="1" stop-color="#1B1D3A" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(540 420) rotate(90) scale(480 520)">
+      <stop stop-color="#6B21A8" stop-opacity="0.8" />
+      <stop offset="1" stop-color="#0B1220" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1350" fill="url(#bg)" />
+  <rect width="1080" height="1350" fill="url(#glow)" />
+  <text x="120" y="200" fill="#FF6F00" font-family="'Space Grotesk', sans-serif" font-size="36" letter-spacing="0.35em">B U D S E N S E . A I</text>
+  <text x="120" y="320" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="92" font-weight="700" letter-spacing="0.04em">
+    THE INTELLIGENT
+  </text>
+  <text x="120" y="420" fill="#A855F7" font-family="'Space Grotesk', sans-serif" font-size="92" font-weight="700" letter-spacing="0.04em">
+    BUDTENDER
+  </text>
+  <text x="120" y="520" fill="#F9FAFB" opacity="0.75" font-family="'Space Grotesk', sans-serif" font-size="30" letter-spacing="0.06em">
+    WATSON-POWERED RECOMMENDATIONS. CLEAN PRODUCT GUARANTEED.
+  </text>
+  <circle cx="880" cy="1080" r="190" fill="#FF6F00" fill-opacity="0.15" />
+  <circle cx="880" cy="1080" r="130" fill="#FF6F00" fill-opacity="0.25" />
+  <circle cx="880" cy="1080" r="70" fill="#FF6F00" />
+  <text x="150" y="660" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="32" font-weight="600">
+    ➤ Watson Discovery + LangChain
+  </text>
+  <text x="150" y="720" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="32" font-weight="600">
+    ➤ COA Guardrails with impurity badges
+  </text>
+  <text x="150" y="780" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="32" font-weight="600">
+    ➤ POS auto-reserve + lounge routing
+  </text>
+  <text x="150" y="840" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="32" font-weight="600">
+    ➤ Retro-futuristic chatbot personality
+  </text>
+  <rect x="120" y="960" width="520" height="220" rx="32" fill="#111827" stroke="#FF6F00" stroke-width="3" stroke-dasharray="16 16" />
+  <text x="160" y="1030" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="28" font-weight="600">
+    SaaS Tiers
+  </text>
+  <text x="160" y="1090" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="24">
+    • Free: boutique chat + strain intel
+  </text>
+  <text x="160" y="1140" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="24">
+    • Pro: auto-order, COA parsing, notifications
+  </text>
+  <text x="160" y="1190" fill="#F9FAFB" font-family="'Space Grotesk', sans-serif" font-size="24">
+    • Enterprise: lounge integration + analytics
+  </text>
+  <text x="120" y="1280" fill="#F1F5F9" font-family="'Space Grotesk', sans-serif" font-size="24" letter-spacing="0.2em">
+    CLEAN FLOWER. CURATED EXPERIENCES. LOYAL CUSTOMERS.
+  </text>
+</svg>
