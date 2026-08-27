@@ -1,20 +1,10 @@
 [
   {
-    "id": "FT-2026-002",
-    "title": "WHITE PIECE",
-    "story": "",
-    "date": "2026-05-01",
-    "day": 121,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
     "id": "FT-2026-001",
-    "title": "DARK PIECE",
+    "title": "MONO FIGURE",
     "story": "",
-    "date": "2026-05-02",
-    "day": 122,
+    "date": "2026-02-08",
+    "day": 39,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []

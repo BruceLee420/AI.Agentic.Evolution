@@ -207,7 +207,13 @@ const LUMA = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
  * every piece gets a legible mark without you sorting them by hand.
  */
 async function pickInk(previewBuf, w, h) {
-  if (INK_MODE !== 'auto') return { ink: INK_RGB, halo: INK_RGB[0] > 127 ? [0, 0, 0] : [255, 255, 255] };
+  if (INK_MODE !== 'auto') {
+    // Halo tone comes from the ink's brightness, not one channel. A saturated
+    // colour like neon green is bright overall despite having no red, and needs
+    // a dark halo to hold its edge.
+    const halo = LUMA(...INK_RGB) > 127 ? [0, 0, 0] : [255, 255, 255];
+    return { ink: INK_RGB, halo };
+  }
 
   const boxW = Math.max(1, Math.round(w * 0.38));
   const boxH = Math.max(1, Math.round(h * 0.20));
