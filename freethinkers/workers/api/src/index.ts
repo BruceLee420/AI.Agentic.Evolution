@@ -171,6 +171,86 @@ async function reserve(req: Request, env: Env): Promise<Response> {
   return json({ ok: true, ref }, 200, h);
 }
 
+/* ---------------- Collector's Vault ---------------- */
+
+const VAULT_TTL_HOURS = 72;
+
+async function makeVaultToken(env: Env, email: string) {
+  const exp = Date.now() + VAULT_TTL_HOURS * 3600_000;
+  const payload = `${email.toLowerCase()}.${exp}`;
+  return `${btoa(payload)}.${await hmac(env.SIGNING_KEY, `vault:${payload}`)}`;
+}
+
+async function readVaultToken(env: Env, token: string): Promise<string | null> {
+  const [b64, sig] = (token ?? '').split('.');
+  if (!b64 || !sig) return null;
+  let payload: string;
+  try { payload = atob(b64); } catch { return null; }
+  if ((await hmac(env.SIGNING_KEY, `vault:${payload}`)) !== sig) return null;
+  const [email, exp] = payload.split('.');
+  if (Date.now() > Number(exp)) return null;
+  return email;
+}
+
+/**
+ * Emails an access link if the address holds 12+ pieces.
+ *
+ * Always returns the same neutral response either way — otherwise this endpoint
+ * becomes a way to enumerate who your collectors are.
+ */
+async function vaultRequest(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const h = cors(env, req.headers.get('origin'));
+  const { email } = (await req.json().catch(() => ({}))) as any;
+  const neutral = json({ ok: true }, 200, h);
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return neutral;
+
+  const count = Number((await env.ENTITLEMENTS.get(`COUNT:${email.toLowerCase()}`)) ?? 0);
+  if (count < 12) return neutral;
+
+  const token = await makeVaultToken(env, email);
+  const link = `${env.SITE_ORIGIN}/vault?token=${encodeURIComponent(token)}`;
+  ctx.waitUntil(
+    fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email }] }],
+        from: { email: 'vault@freethinkers.ai', name: 'Freethinkers.AI' },
+        subject: 'Your Vault access link',
+        content: [{
+          type: 'text/plain',
+          value:
+            `You hold ${count} pieces — the Vault is open to you.\n\n${link}\n\n` +
+            `This link is personal and expires in ${VAULT_TTL_HOURS} hours. ` +
+            `Request another any time at ${env.SITE_ORIGIN}/vault\n\n— FREETHINKERS.AI`,
+        }],
+      }),
+    }).catch((e) => console.log('vault email failed', String(e)))
+  );
+  console.log(JSON.stringify({ evt: 'vault_request', count }));
+  return neutral;
+}
+
+/** Vault contents for a valid token. Lists are editable via KV, no redeploy. */
+async function vaultContent(req: Request, env: Env): Promise<Response> {
+  const h = cors(env, req.headers.get('origin'));
+  const email = await readVaultToken(env, new URL(req.url).searchParams.get('token') ?? '');
+  if (!email) return json({ error: 'invalid or expired' }, 403, h);
+
+  const count = Number((await env.ENTITLEMENTS.get(`COUNT:${email}`)) ?? 0);
+  if (count < 12) return json({ error: 'not entitled' }, 403, h);
+
+  const list = async (key: string) =>
+    ((await env.PRICING.get(key, 'json')) as any[] | null) ?? [];
+
+  return json({
+    count,
+    archive: await list('VAULT:ARCHIVE'),
+    process: await list('VAULT:PROCESS'),
+    next: await list('VAULT:NEXT'),
+  }, 200, h);
+}
+
 async function snipcartWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const token = req.headers.get('x-snipcart-requesttoken');
   if (!token) return json({ error: 'missing token' }, 401);
@@ -314,6 +394,8 @@ export default {
     if ((m = pathname.match(/^\/api\/certificate\/([\w-]+)$/))) return certificate(req, env, m[1]);
     if (pathname === '/api/subscribe' && req.method === 'POST') return subscribe(req, env);
     if (pathname === '/api/reserve' && req.method === 'POST') return reserve(req, env);
+    if (pathname === '/api/vault/request' && req.method === 'POST') return vaultRequest(req, env, ctx);
+    if (pathname === '/api/vault/content') return vaultContent(req, env);
     if (pathname === '/api/webhooks/snipcart' && req.method === 'POST') return snipcartWebhook(req, env, ctx);
     if (pathname === '/api/download') return download(req, env);
 

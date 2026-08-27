@@ -1,0 +1,124 @@
+---
+/**
+ * The Collector's Vault — private area for holders of 12+ pieces.
+ *
+ * Why a magic link and not the GitHub repo (the original idea): a repo is a
+ * terrible gallery, leaks the moment one person forks it, and can't be revoked.
+ * This is tied to the purchase email the worker already tracks, is revocable by
+ * flipping one KV key, and looks like part of the brand.
+ *
+ * Flow: email → worker checks COUNT:{email} ≥ 12 → emails a signed link →
+ * /vault?token=… loads content. The worker returns the same neutral response
+ * whether or not the address qualifies, so this page can't be used to probe
+ * who your collectors are.
+ */
+import Base from '../layouts/Base.astro';
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+---
+<Base title="Collector's Vault — FREETHINKERS.AI" description="Private archive for Freethinkers collectors.">
+  <section class="vault-page">
+    <!-- state 1: locked -->
+    <div id="vault-gate">
+      <p class="kicker">Collectors only</p>
+      <h1>The Vault</h1>
+      <p class="vault-lede">
+        Twelve pieces opens the archive: every work at master resolution, the
+        process files and progress scans behind them, and first look at each drop
+        before it goes public.
+      </p>
+
+      <form class="signup vault-form" id="vault-form">
+        <input type="email" name="email" required placeholder="Your purchase email" aria-label="Purchase email" />
+        <button class="button" type="submit">Send my access link</button>
+      </form>
+      <p class="form-msg" id="vault-msg" hidden></p>
+      <p class="vault-fine">
+        Access is checked against the email you bought with. Not a collector yet?
+        <a href="/#gallery">Start with a piece →</a>
+      </p>
+    </div>
+
+    <!-- state 2: unlocked -->
+    <div id="vault-content" hidden>
+      <p class="kicker">Access granted</p>
+      <h1>Welcome to the Vault</h1>
+      <p class="vault-lede" id="vault-welcome"></p>
+
+      <div class="vault-grid">
+        <article class="vault-card">
+          <h2>Master archive</h2>
+          <p>Every finished piece at full resolution, including works retired from public sale.</p>
+          <div id="vault-archive" class="vault-list">Loading…</div>
+        </article>
+
+        <article class="vault-card">
+          <h2>Process files</h2>
+          <p>Progress scans, rejected directions, and the concepts each finished piece grew out of.</p>
+          <div id="vault-process" class="vault-list">Loading…</div>
+        </article>
+
+        <article class="vault-card">
+          <h2>Next drop — first look</h2>
+          <p>What's coming, before it's public. Collectors get first refusal on the annual composite.</p>
+          <div id="vault-next" class="vault-list">Loading…</div>
+        </article>
+      </div>
+
+      <p class="vault-fine">
+        This link is personal to you and expires. Request a fresh one any time from this page.
+      </p>
+    </div>
+  </section>
+
+  <script define:vars={{ API }}>
+    const token = new URLSearchParams(location.search).get('token');
+    const gate = document.getElementById('vault-gate');
+    const content = document.getElementById('vault-content');
+
+    const render = (el, items, empty) => {
+      el.innerHTML = items?.length
+        ? items.map((i) =>
+            `<a class="vault-item" href="${i.url ?? '#'}">${i.label ?? i.id}</a>`).join('')
+        : `<p class="vault-empty">${empty}</p>`;
+    };
+
+    if (token) {
+      // Validate and load. An invalid or expired token falls back to the gate.
+      fetch(`${API}/api/vault/content?token=${encodeURIComponent(token)}`)
+        .then((r) => { if (!r.ok) throw new Error('denied'); return r.json(); })
+        .then((v) => {
+          gate.hidden = true;
+          content.hidden = false;
+          document.getElementById('vault-welcome').textContent =
+            `You hold ${v.count} pieces. Everything below is yours to browse.`;
+          render(document.getElementById('vault-archive'), v.archive, 'Archive is being populated.');
+          render(document.getElementById('vault-process'), v.process, 'Process files are being uploaded.');
+          render(document.getElementById('vault-next'), v.next, 'Next drop will appear here first.');
+        })
+        .catch(() => {
+          const msg = document.getElementById('vault-msg');
+          msg.textContent = 'That link is invalid or expired. Request a new one below.';
+          msg.hidden = false;
+        });
+    }
+
+    document.getElementById('vault-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const email = new FormData(form).get('email');
+      const msg = document.getElementById('vault-msg');
+      try {
+        await fetch(`${API}/api/vault/request`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+      } catch { /* fall through to the same neutral message */ }
+      // Deliberately identical whether or not the address qualifies.
+      msg.textContent =
+        'If that email qualifies, an access link is on its way. Check your inbox.';
+      msg.hidden = false;
+      form.reset();
+    });
+  </script>
+</Base>

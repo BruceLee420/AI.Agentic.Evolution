@@ -1,0 +1,158 @@
+---
+/**
+ * Concept detail page — one per concept.
+ *
+ * These exist for traffic, not just browsing: every concept becomes a
+ * shareable, indexable landing page with its own OG card. When you post a
+ * concept anywhere, it links somewhere real instead of dumping people on a
+ * grid of 3,000 things. Cross-sell at the bottom raises the odds a single
+ * visit becomes a bundle.
+ */
+import Base from '../../layouts/Base.astro';
+import concepts from '../../data/concepts.json';
+
+export function getStaticPaths() {
+  return (concepts as any[]).map((c) => ({ params: { id: c.id }, props: { concept: c } }));
+}
+const { concept } = Astro.props;
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.ftwlabs.ai';
+const SINGLE = Number(import.meta.env.PUBLIC_CONCEPT_PRICE ?? 19);
+const BUNDLE_SIZE = Number(import.meta.env.PUBLIC_BUNDLE_SIZE ?? 10);
+const BUNDLE_PRICE = Number(import.meta.env.PUBLIC_BUNDLE_PRICE ?? 99);
+
+// Related = shares a tag, excluding itself. Cheap, and good enough to keep
+// people moving through the catalog.
+const related = (concepts as any[])
+  .filter((c) => c.id !== concept.id && (c.tags ?? []).some((t: string) => (concept.tags ?? []).includes(t)))
+  .slice(0, 6);
+---
+<Base
+  title={`${concept.title ?? concept.id} — FTWLABS`}
+  description={`${concept.title ?? concept.id} — an original concept master from the Freethinkers lab. $${SINGLE}, or any ${BUNDLE_SIZE} for $${BUNDLE_PRICE}.`}
+>
+  <article class="concept-page">
+    <div class="cp-art">
+      <figure class="protected" data-id={concept.id} data-src={`${API}/img/${concept.id}`}>
+        <canvas></canvas>
+      </figure>
+    </div>
+
+    <div class="cp-info">
+      <p class="cp-kicker">Concept master</p>
+      <h1>{concept.title ?? concept.id}</h1>
+      <p class="cp-id">{concept.id}{concept.date ? ` · ${concept.date}` : ''}</p>
+
+      {concept.tags?.length > 0 && (
+        <div class="cp-tags">
+          {concept.tags.map((t: string) => <a class="tag" href={`/?tag=${t}#explore`}>{t}</a>)}
+        </div>
+      )}
+
+      <div class="cp-price">
+        <span class="cp-amount">${SINGLE}</span>
+        <span class="cp-or">or any {BUNDLE_SIZE} for ${BUNDLE_PRICE}</span>
+      </div>
+
+      <button class="cta big" id="cp-add" data-id={concept.id} type="button">Add to bundle</button>
+      <a class="ghost-link cp-back" href="/#explore">← Browse all concepts</a>
+
+      <ul class="cp-includes">
+        <li>Full-resolution master file, yours to keep</li>
+        <li>Personal and commercial use license</li>
+        <li>Instant delivery after checkout</li>
+      </ul>
+    </div>
+  </article>
+
+  {related.length > 0 && (
+    <section class="cp-related">
+      <h2>More like this</h2>
+      <div class="rel-grid">
+        {related.map((r) => (
+          <a class="rel" href={`/c/${r.id}`}>
+            <span class="rel-art" data-src={`${API}/img/${r.id}`} data-id={r.id}></span>
+            <span class="rel-id">{r.title ?? r.id}</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  )}
+
+  <div class="bundlebar" id="bundlebar" hidden>
+    <div class="bb-left"><strong id="bb-count">0</strong> selected <span id="bb-hint" class="bb-hint"></span></div>
+    <div class="bb-right">
+      <span class="bb-price" id="bb-price">$0</span>
+      <button id="bb-buy" class="cta" type="button">Checkout →</button>
+    </div>
+  </div>
+
+  <script define:vars={{ SINGLE, BUNDLE_SIZE, BUNDLE_PRICE }}>
+    const EXTRA = 8;
+    const hue = (id) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
+    const grad = (id) =>
+      `linear-gradient(${hue(id)}deg, hsl(${hue(id)} 70% 22%), hsl(${(hue(id) + 60) % 360} 65% 12%))`;
+
+    // Hero art → canvas (no saveable src). Placeholder if no preview yet.
+    document.querySelectorAll('.protected').forEach((fig) => {
+      const canvas = fig.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const id = fig.dataset.id;
+      const fallback = () => {
+        canvas.width = canvas.height = 1000;
+        const g = ctx.createLinearGradient(0, 0, 1000, 1000);
+        g.addColorStop(0, `hsl(${hue(id)} 70% 22%)`);
+        g.addColorStop(1, `hsl(${(hue(id) + 60) % 360} 65% 12%)`);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, 1000, 1000);
+        ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = '30px sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText(id, 500, 500);
+        fig.classList.add('loaded');
+      };
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0); fig.classList.add('loaded');
+      };
+      img.onerror = fallback;
+      img.src = fig.dataset.src;
+      for (const e of ['contextmenu', 'dragstart']) fig.addEventListener(e, (ev) => ev.preventDefault());
+    });
+
+    // Related thumbs
+    document.querySelectorAll('.rel-art').forEach((el) => {
+      el.style.background = grad(el.dataset.id);
+      const img = new Image();
+      img.onload = () => { el.style.backgroundImage = `url(${img.src})`; };
+      img.src = el.dataset.src;
+    });
+
+    /* ---- bundle (shares localStorage with the explorer) ---- */
+    const selected = new Set(JSON.parse(localStorage.getItem('ftw-bundle') || '[]'));
+    const price = (n) => (n <= 0 ? 0 : n < BUNDLE_SIZE ? n * SINGLE : BUNDLE_PRICE + (n - BUNDLE_SIZE) * EXTRA);
+    const bar = document.getElementById('bundlebar');
+    const addBtn = document.getElementById('cp-add');
+
+    function sync() {
+      const n = selected.size;
+      bar.hidden = n === 0;
+      document.getElementById('bb-count').textContent = n;
+      document.getElementById('bb-price').textContent = `$${price(n)}`;
+      const need = BUNDLE_SIZE - n;
+      document.getElementById('bb-hint').textContent =
+        need > 0 ? `— add ${need} more for the $${BUNDLE_PRICE} bundle` : '— bundle price unlocked 🎉';
+      addBtn.textContent = selected.has(addBtn.dataset.id) ? '✓ In your bundle — add more' : 'Add to bundle';
+      localStorage.setItem('ftw-bundle', JSON.stringify([...selected]));
+    }
+
+    addBtn.addEventListener('click', () => {
+      const id = addBtn.dataset.id;
+      selected.has(id) ? selected.delete(id) : selected.add(id);
+      sync();
+    });
+    document.getElementById('bb-buy').addEventListener('click', () => {
+      const ids = [...selected];
+      location.href = `/checkout?items=${encodeURIComponent(ids.join(','))}&n=${ids.length}&total=${price(ids.length)}`;
+    });
+    sync();
+  </script>
+</Base>

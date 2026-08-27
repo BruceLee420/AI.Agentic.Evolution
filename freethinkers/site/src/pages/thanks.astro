@@ -1,0 +1,76 @@
+---
+/**
+ * Post-purchase page for Freethinkers. Set as the redirect on your payment
+ * products (…/thanks?piece=FT-2026-001&ref=XXXX).
+ *
+ * Also where the local Vault counter increments — owning a piece should
+ * immediately feel like progress toward the 12-piece Vault.
+ */
+import Base from '../layouts/Base.astro';
+---
+<Base title="Thank you — FREETHINKERS.AI">
+  <section class="thanks">
+    <p class="kicker">Order received</p>
+    <h1>The master is yours.</h1>
+
+    <div class="thanks-box">
+      <p><strong>What happens next</strong></p>
+      <ol>
+        <li>A private download link is on its way to your email. It expires in 72 hours and allows 3 downloads — save the file somewhere safe.</li>
+        <li>Your master is fingerprinted to your order. It's traceable to you, so don't re-share the file itself.</li>
+        <li>Your free sweatshirt or long-sleeve — carrying this piece and its QR code — ships separately. Watch for a sizing email.</li>
+        <li>Order reference: <code id="ref">—</code></li>
+      </ol>
+      <p class="thanks-help">
+        Link expired or never arrived? Email
+        <a href="mailto:vault@freethinkers.ai">vault@freethinkers.ai</a> with that
+        reference — I'll reissue it.
+      </p>
+    </div>
+
+    <div class="thanks-cert" id="cert-block" hidden>
+      <h2>Your certificate</h2>
+      <p>This piece now has a public certificate page. It's what your garment's QR code points to.</p>
+      <a class="button" id="cert-link" href="/">View the certificate →</a>
+    </div>
+
+    <div class="thanks-next">
+      <h2>Vault progress</h2>
+      <div class="vp-dots" id="vp-dots"></div>
+      <p class="vp-label" id="vp-label"></p>
+      <div class="cta-row">
+        <a class="button" href="/#gallery">See what's next</a>
+        <a class="button ghost" href="https://ftwlabs.ai">Explore the concept lab</a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const ref = params.get('ref');
+    const piece = params.get('piece');
+    if (ref) document.getElementById('ref').textContent = ref;
+
+    if (piece) {
+      const block = document.getElementById('cert-block');
+      document.getElementById('cert-link').href = `/a/${piece}`;
+      block.hidden = false;
+
+      // Record the piece locally so the Vault counter reflects it right away.
+      // The worker holds the authoritative count against the purchase email.
+      const owned = new Set(JSON.parse(localStorage.getItem('ft-owned') || '[]'));
+      owned.add(piece);
+      localStorage.setItem('ft-owned', JSON.stringify([...owned]));
+    }
+
+    const owned = JSON.parse(localStorage.getItem('ft-owned') || '[]');
+    document.getElementById('vp-dots').innerHTML = Array.from(
+      { length: 12 }, (_, i) => `<span class="vp-dot${i < owned.length ? ' on' : ''}"></span>`
+    ).join('');
+    const left = Math.max(0, 12 - owned.length);
+    document.getElementById('vp-label').textContent =
+      left === 0
+        ? 'Vault unlocked — check your email for access.'
+        : `${owned.length} of 12 — ${left} more opens the Collector's Vault.`;
+  </script>
+</Base>

@@ -1,0 +1,82 @@
+---
+/**
+ * Post-purchase page. Set this as the redirect URL on your Gumroad/Stripe
+ * products (…/thanks?ref=XXXX).
+ *
+ * Three jobs, in order of how much money they make:
+ *   1. tell the buyer exactly what happens next (kills "where's my file?" email),
+ *   2. clear the bundle so nobody accidentally re-buys,
+ *   3. turn a one-time buyer into a list member and point them at Freethinkers.
+ */
+import Base from '../layouts/Base.astro';
+---
+<Base title="Thank you — FTWLABS">
+  <section class="thanks">
+    <p class="kicker">Order received</p>
+    <h1>Your concepts are on the way.</h1>
+
+    <div class="thanks-box">
+      <p><strong>What happens next</strong></p>
+      <ol>
+        <li>Your download link is in your email right now — check spam if it's not there in 5 minutes.</li>
+        <li>Files are full-resolution masters. Personal and commercial use, yours to keep.</li>
+        <li>Order reference: <code id="ref">—</code></li>
+      </ol>
+      <p class="thanks-help">
+        Anything wrong with the delivery? Email
+        <a href="mailto:hello@ftwlabs.ai">hello@ftwlabs.ai</a> with that reference and
+        I'll sort it out personally.
+      </p>
+    </div>
+
+    <div class="thanks-next">
+      <h2>While you're here</h2>
+      <p>
+        The finished works these concepts became live on Freethinkers.AI — full
+        pieces, museum-grade prints, and a QR-coded garment with every master.
+      </p>
+      <div class="cta-row">
+        <a class="cta" href="https://freethinkers.ai">See the finished works →</a>
+        <a class="ghost" href="/#explore">Browse more concepts</a>
+      </div>
+    </div>
+
+    <div class="thanks-list">
+      <h2>Get first look at new drops</h2>
+      <form class="signup" id="thanks-signup">
+        <input type="email" name="email" required placeholder="you@email.com" aria-label="Email" />
+        <button class="cta" type="submit">Keep me posted</button>
+      </form>
+      <p class="form-msg" id="thanks-msg" hidden></p>
+    </div>
+  </section>
+
+  <script>
+    const API = 'https://api.ftwlabs.ai';
+    const ref = new URLSearchParams(location.search).get('ref');
+    if (ref) document.getElementById('ref').textContent = ref;
+
+    // The purchase is done — clear the bundle so a refresh can't re-buy it.
+    localStorage.removeItem('ftw-bundle');
+
+    const form = document.getElementById('thanks-signup');
+    const msg = document.getElementById('thanks-msg');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = new FormData(form).get('email');
+      try {
+        const r = await fetch(`${API}/api/subscribe`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, list: 'ftwlabs-buyers' }),
+        });
+        if (!r.ok) throw new Error();
+        msg.textContent = "You're on the list.";
+      } catch {
+        msg.textContent = 'Couldn’t reach the list just now — email hello@ftwlabs.ai and I’ll add you.';
+      }
+      msg.hidden = false;
+      form.reset();
+    });
+  </script>
+</Base>

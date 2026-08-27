@@ -179,3 +179,40 @@ button, input, select { font: inherit; }
 .foot .fine { font-size: .78rem; opacity: .75; max-width: 40rem; margin: .6rem auto 0; }
 
 @media print { .tile, .lb-figure canvas { display: none !important; } }
+
+/* ---------- concept detail page ---------- */
+.concept-page { max-width: 1200px; margin: 0 auto; padding: 3rem 1.25rem; display: grid; gap: 2.5rem; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .concept-page { grid-template-columns: 3fr 2fr; } }
+.protected { margin: 0; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.protected canvas { width: 100%; display: block; opacity: 0; transition: opacity .35s; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.protected.loaded canvas { opacity: 1; }
+.cp-kicker { color: var(--accent); font-size: .75rem; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 .6rem; }
+.cp-info h1 { font-size: 2.1rem; margin: 0 0 .3rem; letter-spacing: -.02em; }
+.cp-id { color: var(--dim); font-size: .85rem; margin: 0 0 1.1rem; font-variant-numeric: tabular-nums; }
+.cp-tags { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.cp-tags .tag { text-decoration: none; }
+.cp-price { display: flex; align-items: baseline; gap: .75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.cp-amount { font-size: 2.2rem; font-weight: 800; color: var(--accent); }
+.cp-or { color: var(--dim); font-size: .9rem; }
+.cp-back { display: inline-block; margin-top: 1rem; }
+.cp-includes { list-style: none; padding: 0; margin: 1.75rem 0 0; color: var(--dim); font-size: .9rem; line-height: 1.9; }
+.cp-includes li::before { content: '✓ '; color: var(--accent); }
+
+.cp-related { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 6rem; border-top: 1px solid var(--line); }
+.cp-related h2 { font-size: 1.4rem; margin: 2rem 0 1.25rem; }
+.rel-grid { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.rel { text-decoration: none; color: var(--dim); font-size: .78rem; }
+.rel-art { display: block; aspect-ratio: 1; border-radius: var(--radius); border: 1px solid var(--line); background-size: cover; background-position: center; margin-bottom: .4rem; transition: transform .15s; }
+.rel:hover .rel-art { transform: translateY(-2px); }
+
+/* ---------- thanks ---------- */
+.thanks { max-width: 680px; margin: 0 auto; padding: 3.5rem 1.25rem 6rem; }
+.thanks h1 { font-size: 2.2rem; margin: 0 0 1.75rem; letter-spacing: -.02em; }
+.thanks h2 { font-size: 1.3rem; margin: 0 0 .75rem; }
+.thanks-box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2.5rem; }
+.thanks-box ol { padding-left: 1.2rem; color: var(--dim); line-height: 1.8; margin: .75rem 0; }
+.thanks-box code { background: var(--bg); padding: .15rem .45rem; border-radius: 3px; color: var(--accent); }
+.thanks-help { color: var(--dim); font-size: .88rem; margin: 1rem 0 0; line-height: 1.6; }
+.thanks-next, .thanks-list { margin-bottom: 2.5rem; }
+.thanks-next p { color: var(--dim); line-height: 1.6; }
+.cta-row { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1.25rem; align-items: center; }
