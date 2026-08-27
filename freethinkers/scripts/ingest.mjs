@@ -439,10 +439,22 @@ if (needReview.length) {
   needReview.forEach((r) => console.log(`   ${r.filename}\n     → ${r.date} (day ${r.day}) — ${r.review}`));
 }
 
+// Print upload commands for the shell actually in use — the bash loop is a
+// syntax error in PowerShell, and vice versa.
+const isWin = process.platform === 'win32';
+const sep = isWin ? '\\' : '/';
+const uploads = isWin
+  ? `   Previews → R2:  Get-ChildItem "${OUT}\\previews" | %{ npx wrangler r2 object put "ft-public/previews/$($_.Name)" --file $_.FullName }
+   Masters  → R2:  Get-ChildItem "${OUT}\\masters"  | %{ npx wrangler r2 object put "ft-masters/masters/$($_.Name)" --file $_.FullName }`
+  : `   Previews → R2:  for f in ${OUT}/previews/*; do npx wrangler r2 object put "ft-public/previews/$(basename "$f")" --file "$f"; done
+   Masters  → R2:  for f in ${OUT}/masters/*;  do npx wrangler r2 object put "ft-masters/masters/$(basename "$f")" --file "$f"; done`;
+
+const first = catalog.find((r) => r.processed === 'yes' && !r.dupe);
 console.log(`
+ Check this one before running the rest:
+   ${OUT}${sep}previews${sep}${first?.id ?? 'FT-2026-001'}.png
 
  Next:
-   Previews → R2:  for f in ${OUT}/previews/*; do npx wrangler r2 object put "ft-public/previews/$(basename $f)" --file "$f"; done
-   Masters  → R2:  for f in ${OUT}/masters/*;  do npx wrangler r2 object put "ft-masters/masters/$(basename $f)" --file "$f"; done
-   Cards:          node make-og-images.mjs --previews ${OUT}/previews
+${uploads}
+   Cards:          node make-og-images.mjs --previews ${OUT}${sep}previews
 `);

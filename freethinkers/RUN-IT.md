@@ -12,13 +12,30 @@ runs where your files already are.
 
 ## One-time setup (~5 minutes)
 
-```bash
-# 1. Get the code
+### Windows / PowerShell
+
+Do **not** run this from `C:\WINDOWS\system32` — it's write-protected, and a
+terminal opened as admin often starts there. Start in your home folder.
+
+```powershell
+cd $HOME
 git clone https://github.com/BruceLee420/AI.Agentic.Evolution.git
 cd AI.Agentic.Evolution
 git checkout claude/freethinkers-migration-art-protection-dkldow
+cd freethinkers\scripts
+npm install
+```
 
-# 2. Install the pipeline
+Run each line separately. Older PowerShell (5.1) doesn't accept `&&` as a
+separator, and `\` is not a line-continuation character — that's a bash thing.
+
+### macOS / Linux
+
+```bash
+cd ~
+git clone https://github.com/BruceLee420/AI.Agentic.Evolution.git
+cd AI.Agentic.Evolution
+git checkout claude/freethinkers-migration-art-protection-dkldow
 cd freethinkers/scripts && npm install
 ```
 
@@ -36,22 +53,50 @@ No Drive Desktop? Just download the folder and point at wherever it landed.
 
 ---
 
-## The run
+## The run — Windows / PowerShell
 
-```bash
-cd freethinkers/scripts
+First find your Drive folder. Google Drive for Desktop usually mounts as `G:`,
+but not always:
 
-# Set these two to your actual paths
-DROP="/path/to/Art.Folder/1-Drop"
-SIG="/path/to/Art.Folder/1-Drop/Signature.png"
+```powershell
+# Try this — it prints the folder if the path is right
+Get-ChildItem "G:\My Drive\Art.Folder" -ErrorAction SilentlyContinue
+
+# Nothing? Hunt for it across drive letters
+Get-PSDrive -PSProvider FileSystem | ForEach-Object {
+  Get-ChildItem "$($_.Name):\My Drive\Art.Folder" -ErrorAction SilentlyContinue
+}
+```
+
+Then, from `freethinkers\scripts`:
+
+```powershell
+$DROP = "G:\My Drive\Art.Folder\1-Drop"
+$SIG  = "$DROP\Signature.png"
 
 # 1. Ingest — titles, dates, signature, fingerprint, masters, catalog
-node ingest.mjs "$DROP" --signature "$SIG" --artist "Adrian A. Grimaldo" --limit 5
+node ingest.mjs $DROP --signature $SIG --artist "Adrian A. Grimaldo" --limit 5
 
 # 2. Score — visual-impact ranking as a starting order
 node score.mjs
 
 # 3. Share cards for every piece
+node make-og-images.mjs --previews .\out\previews
+```
+
+Keep each `node` command on **one line**. PowerShell uses a backtick (`` ` ``)
+for line continuation, never a backslash.
+
+## The run — macOS / Linux
+
+```bash
+cd freethinkers/scripts
+
+DROP="$HOME/Library/CloudStorage/GoogleDrive-aagrimaldo@gmail.com/My Drive/Art.Folder/1-Drop"
+SIG="$DROP/Signature.png"
+
+node ingest.mjs "$DROP" --signature "$SIG" --artist "Adrian A. Grimaldo" --limit 5
+node score.mjs
 node make-og-images.mjs --previews ./out/previews
 ```
 
@@ -104,7 +149,9 @@ hand is the final word and nothing overwrites it.
 ## See it
 
 ```bash
-cd ../site && npm install && npm run dev     # → http://localhost:4321
+# macOS/Linux:  cd ../site && npm install && npm run dev
+# PowerShell:   cd ..\site ; npm install ; npm run dev
+#               → http://localhost:4321
 ```
 
 Your pieces, your signature, your day counter, your 365 grid.

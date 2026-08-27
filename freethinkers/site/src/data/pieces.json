@@ -1,40 +1,10 @@
 [
   {
-    "id": "FT-2026-007",
-    "title": "LOVE",
-    "story": "",
-    "date": "2026-03-07",
-    "day": 66,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
-    "id": "FT-2026-004",
-    "title": "FEAR",
-    "story": "",
-    "date": "2026-03-15",
-    "day": 74,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
     "id": "FT-2026-001",
     "title": "AI AGENTS",
     "story": "",
     "date": "2026-04-11",
     "day": 101,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
-    "id": "FT-2026-005",
-    "title": "GAMER MIND",
-    "story": "",
-    "date": "2026-04-12",
-    "day": 102,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []
@@ -55,26 +25,6 @@
     "story": "",
     "date": "2026-06-02",
     "day": 153,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
-    "id": "FT-2026-008",
-    "title": "WORM RIG",
-    "story": "",
-    "date": "2026-06-06",
-    "day": 157,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
-    "id": "FT-2026-006",
-    "title": "HAWK EYE",
-    "story": "",
-    "date": "2026-06-10",
-    "day": 161,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []
