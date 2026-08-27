@@ -1,0 +1,63 @@
+---
+/**
+ * PriceLadder — the scarcity engine, made visible.
+ *
+ * Shows the buyer exactly where the price is now, how many are left at that
+ * price, and what the next tier costs. Live numbers come from the worker
+ * (the same endpoint Snipcart validates against), so the display and the
+ * charged price can never disagree. Falls back to computed base values so the
+ * component is honest and useful before the API is deployed.
+ */
+const { pieceId, compact = false } = Astro.props;
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+const BASE = Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300);
+const TIER_SIZE = Number(import.meta.env.PUBLIC_TIER_SIZE ?? 12);
+const PCT = Number(import.meta.env.PUBLIC_TIER_PCT ?? 12);
+---
+<div class={`ladder${compact ? ' compact' : ''}`} data-piece={pieceId}
+     data-api={API} data-base={BASE} data-size={TIER_SIZE} data-pct={PCT}>
+  <div class="ladder-head">
+    <span class="ladder-price">${BASE}</span>
+    <span class="ladder-tier">Tier 1</span>
+  </div>
+  <div class="ladder-track"><div class="ladder-fill" style="width:0%"></div></div>
+  <p class="ladder-note">Loading live availability…</p>
+</div>
+
+<script>
+  document.querySelectorAll('.ladder').forEach(async (el) => {
+    const { piece, api, base, size, pct } = el.dataset;
+    const priceEl = el.querySelector('.ladder-price');
+    const tierEl = el.querySelector('.ladder-tier');
+    const noteEl = el.querySelector('.ladder-note');
+    const fillEl = el.querySelector('.ladder-fill');
+
+    const ladder = (sold) => {
+      const t = Math.floor(sold / Number(size));
+      const p = Math.round(Number(base) * (1 + Number(pct) / 100) ** t * 100) / 100;
+      const next = Math.round(Number(base) * (1 + Number(pct) / 100) ** (t + 1) * 100) / 100;
+      return { tier: t + 1, price: p, next, remaining: Number(size) - (sold % Number(size)) };
+    };
+
+    let sold = 0;
+    let live = false;
+    try {
+      const r = await fetch(`${api}/api/products/${piece}`);
+      const [p] = await r.json();
+      sold = p.sold ?? 0;
+      live = true;
+      priceEl.textContent = `$${p.price.toFixed(0)}`;
+      tierEl.textContent = `Tier ${p.tier}`;
+      fillEl.style.width = `${((Number(size) - p.remainingAtTier) / Number(size)) * 100}%`;
+      noteEl.innerHTML =
+        `<strong>${p.remainingAtTier} left</strong> at $${p.price.toFixed(0)} — next tier $${p.nextPrice.toFixed(0)}`;
+    } catch {
+      const l = ladder(sold);
+      priceEl.textContent = `$${l.price.toFixed(0)}`;
+      tierEl.textContent = `Tier ${l.tier}`;
+      noteEl.innerHTML =
+        `First <strong>${size}</strong> at $${l.price.toFixed(0)} — then $${l.next.toFixed(0)}. Early buyers keep the lowest price.`;
+    }
+    el.classList.add(live ? 'live' : 'static');
+  });
+</script>

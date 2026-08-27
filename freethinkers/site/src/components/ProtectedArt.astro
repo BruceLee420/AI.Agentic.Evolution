@@ -1,0 +1,59 @@
+---
+/**
+ * ProtectedArt — Layer-2 deterrence renderer for a single hero image.
+ *
+ * Draws the 1080p preview into <canvas> so the DOM holds no saveable full-size
+ * src, and blocks the casual save paths. Real protection is Layer 1 (only
+ * watermarked previews are ever public) and Layer 3 (forensic watermarks +
+ * logging) — see docs/01-art-protection.md.
+ */
+const { pieceId, title, ratio = '1 / 1' } = Astro.props;
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+---
+<figure class="protected-art" data-piece={pieceId} data-src={`${API}/img/${pieceId}`}
+        style={`aspect-ratio:${ratio}`} aria-label={title}>
+  <canvas></canvas>
+  <figcaption class="watermark-card" aria-hidden="true">
+    <p>© FREETHINKERS.AI · {pieceId}</p>
+    <p>Own the master at freethinkers.ai/a/{pieceId}</p>
+  </figcaption>
+</figure>
+
+<script>
+  document.querySelectorAll('.protected-art').forEach((fig) => {
+    const canvas = fig.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const id = fig.dataset.piece;
+    const hue = [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
+
+    const drawPlaceholder = () => {
+      canvas.width = 1080; canvas.height = 1080;
+      const g = ctx.createLinearGradient(0, 0, 1080, 1080);
+      g.addColorStop(0, `hsl(${hue} 45% 25%)`);
+      g.addColorStop(1, `hsl(${(hue + 50) % 360} 40% 12%)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 1080, 1080);
+      ctx.fillStyle = 'rgba(246,244,239,.5)'; ctx.font = '34px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(id, 540, 540);
+      fig.classList.add('loaded');
+    };
+
+    fetch(fig.dataset.src, { credentials: 'omit' })
+      .then((r) => { if (!r.ok) throw new Error('no preview'); return r.blob(); })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);   // no reusable URL left behind
+          fig.classList.add('loaded');
+        };
+        img.onerror = drawPlaceholder;
+        img.src = url;
+      })
+      .catch(drawPlaceholder);
+
+    for (const evt of ['contextmenu', 'dragstart', 'selectstart'])
+      fig.addEventListener(evt, (e) => e.preventDefault());
+  });
+</script>

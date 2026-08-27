@@ -1,0 +1,93 @@
+---
+/**
+ * BuyButtons — Mint / Print / Press.
+ *
+ * Provider-agnostic (see ../lib/checkout.ts). On Snipcart the mint price is
+ * validated server-side at checkout, so a tampered data-item-price is rejected.
+ * On the link rails the button is an outbound payment link, which is what makes
+ * selling possible before cart approval.
+ */
+import { PROVIDER } from '../lib/checkout';
+
+const { pieceId, title } = Astro.props;
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+const BASE = Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300);
+const PRINT = Number(import.meta.env.PUBLIC_PRINT_PRICE ?? 80);
+const PRESS = Number(import.meta.env.PUBLIC_PRESS_PRICE ?? 65);
+const PAY_MINT = import.meta.env.PUBLIC_PAY_URL_MINT ?? '';
+const PAY_PRINT = import.meta.env.PUBLIC_PAY_URL_PRINT ?? '';
+const PAY_PRESS = import.meta.env.PUBLIC_PAY_URL_PRESS ?? '';
+const productUrl = `${API}/api/products/${pieceId}`;
+const snip = PROVIDER === 'snipcart';
+---
+<div class="buy-buttons" data-piece={pieceId} data-product-url={productUrl}>
+  {snip ? (
+    <>
+      <button class="buy mint snipcart-add-item" data-item-id={pieceId}
+              data-item-name={`${title} — Master`} data-item-price={BASE.toFixed(2)}
+              data-item-url={productUrl} data-item-max-quantity="1" data-item-shippable="false">
+        <span class="buy-label">Mint — own the master</span>
+        <span class="price">${BASE}</span>
+      </button>
+      <button class="buy print snipcart-add-item" data-item-id={`${pieceId}-print`}
+              data-item-name={`${title} — Fine Art Print`} data-item-price={PRINT.toFixed(2)}
+              data-item-url={productUrl}>
+        <span class="buy-label">Print — museum-grade giclée</span><span class="price">${PRINT}</span>
+      </button>
+      <button class="buy press snipcart-add-item" data-item-id={`${pieceId}-press`}
+              data-item-name={`${title} — QR Sweatshirt`} data-item-price={PRESS.toFixed(2)}
+              data-item-url={productUrl} data-item-custom1-name="Size"
+              data-item-custom1-options="S|M|L|XL|2XL">
+        <span class="buy-label">Press — wear it with your QR</span><span class="price">${PRESS}</span>
+      </button>
+    </>
+  ) : (
+    <>
+      <a class="buy mint" href={PAY_MINT || '#'} data-pay data-kind="mint">
+        <span class="buy-label">Mint — own the master</span><span class="price">${BASE}</span>
+      </a>
+      <a class="buy print" href={PAY_PRINT || '#'} data-pay data-kind="print">
+        <span class="buy-label">Print — museum-grade giclée</span><span class="price">${PRINT}</span>
+      </a>
+      <a class="buy press" href={PAY_PRESS || '#'} data-pay data-kind="press">
+        <span class="buy-label">Press — wear it with your QR</span><span class="price">${PRESS}</span>
+      </a>
+    </>
+  )}
+
+  <p class="scarcity" hidden></p>
+  <p class="perk">Every master ships with a free sweatshirt or long-sleeve carrying this piece and its unique QR code.</p>
+</div>
+
+<script>
+  document.querySelectorAll('.buy-buttons').forEach(async (box) => {
+    const pieceId = box.dataset.piece;
+
+    // Live price + scarcity from the worker (single source of truth).
+    try {
+      const [p] = await (await fetch(box.dataset.productUrl)).json();
+      const mint = box.querySelector('.mint');
+      if (mint) {
+        if (mint.dataset.itemPrice) mint.dataset.itemPrice = p.price.toFixed(2);
+        mint.querySelector('.price').textContent = `$${p.price.toFixed(0)}`;
+      }
+      const s = box.querySelector('.scarcity');
+      s.innerHTML = `<strong>${p.remainingAtTier} left</strong> at $${p.price.toFixed(0)} — next tier $${p.nextPrice.toFixed(0)}`;
+      s.hidden = false;
+    } catch { /* API not up yet — base prices stand */ }
+
+    // Link rails: carry the piece id through so the order is attributable.
+    box.querySelectorAll('[data-pay]').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        if (!a.getAttribute('href') || a.getAttribute('href') === '#') {
+          e.preventDefault();
+          alert('Payment link not configured yet — set PUBLIC_PAY_URL_* in the site env.');
+          return;
+        }
+        const u = new URL(a.href);
+        u.searchParams.set('note', `${pieceId}:${a.dataset.kind}`);
+        a.href = u.toString();
+      });
+    });
+  });
+</script>

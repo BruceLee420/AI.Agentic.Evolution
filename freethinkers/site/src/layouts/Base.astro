@@ -1,0 +1,57 @@
+---
+const {
+  title = 'FREETHINKERS.AI — Original art. Mint, print, press.',
+  description = 'One finished work every day of 2026. Own the master, hang the print, wear the QR.',
+} = Astro.props;
+const SNIPCART_KEY = import.meta.env.PUBLIC_SNIPCART_KEY ?? '';
+const PROVIDER = import.meta.env.PUBLIC_CHECKOUT_PROVIDER ?? 'gumroad';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noimageindex" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="/styles/protection.css" />
+    {PROVIDER === 'snipcart' && (
+      <link rel="stylesheet" href="https://cdn.snipcart.com/themes/v3.7.1/default/snipcart.css" />
+    )}
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="/" class="brand">FREETHINKERS<span>.AI</span></a>
+      <nav>
+        <a href="/#gallery">Gallery</a>
+        <a href="/#year">The Year</a>
+        <a href="/#vault">Vault</a>
+        <a href="https://ftwlabs.ai" rel="noopener" class="sister">FTWlabs →</a>
+        {PROVIDER === 'snipcart' && (
+          <button class="snipcart-checkout cart">Cart (<span class="snipcart-items-count">0</span>)</button>
+        )}
+      </nav>
+    </header>
+
+    <main><slot /></main>
+
+    <footer class="site-footer">
+      <p>© {new Date().getFullYear()} Freethinkers.AI — every work protected, watermarked, and tracked.</p>
+      <p class="fine">
+        Masters are forensically fingerprinted to their owner. Public previews are
+        1080p and watermarked. Concepts and studies live at
+        <a href="https://ftwlabs.ai">FTWlabs.AI</a>.
+      </p>
+    </footer>
+
+    {PROVIDER === 'snipcart' && (
+      <>
+        <div hidden id="snipcart" data-api-key={SNIPCART_KEY} data-config-modal-style="side"></div>
+        <script async src="https://cdn.snipcart.com/themes/v3.7.1/default/snipcart.js"></script>
+      </>
+    )}
+  </body>
+</html>

@@ -1,0 +1,11 @@
+# Cloudflare Pages edge headers.
+
+/*
+  X-Robots-Tag: noimageindex
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+/img/*
+  Cache-Control: private, no-store
+  X-Robots-Tag: noindex, noimageindex

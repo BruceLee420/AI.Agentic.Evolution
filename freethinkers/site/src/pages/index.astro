@@ -1,0 +1,88 @@
+---
+import Base from '../layouts/Base.astro';
+import Gallery from '../components/Gallery.astro';
+import Calendar365 from '../components/Calendar365.astro';
+import PriceLadder from '../components/PriceLadder.astro';
+import pieces from '../data/pieces.json';
+
+const featured = pieces[0];
+const BASE = Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300);
+---
+<Base>
+  <section class="hero">
+    <p class="kicker">One finished work every day of 2026</p>
+    <h1>Own the art.<br />Wear the proof.</h1>
+    <p class="sub">
+      Every piece can be minted as a full-resolution master, printed museum-grade,
+      or pressed onto a garment with a QR code that links back to your certificate
+      of ownership. Masters start at ${BASE} — and the price only goes up.
+    </p>
+    <div class="hero-cta">
+      <a href="#gallery" class="button">See the collection</a>
+      <a href="#year" class="ghost-link">Watch the year fill up →</a>
+    </div>
+    <div class="hero-ladder">
+      <PriceLadder pieceId={featured?.id ?? 'FT-2026-001'} compact={true} />
+    </div>
+  </section>
+
+  <Gallery />
+
+  <Calendar365 />
+
+  <section class="vault" id="vault">
+    <div class="vault-inner">
+      <h2>The Collector's Vault</h2>
+      <p>
+        Own <strong>12 pieces</strong> and the Vault opens: master-grade browsing of the
+        full archive, process files and progress scans, and first look at every drop
+        before it goes public.
+      </p>
+      <div class="vault-progress" id="vault-progress">
+        <div class="vp-dots" id="vp-dots"></div>
+        <p class="vp-label" id="vp-label">Track your progress toward the Vault.</p>
+      </div>
+      <p class="vault-fine">
+        Access is tied to your purchase email and stays active for as long as you hold the pieces.
+      </p>
+    </div>
+  </section>
+
+  <section class="how">
+    <h2>Three ways to own it</h2>
+    <div class="how-grid">
+      <div class="how-card">
+        <span class="how-n">01</span><h3>Mint</h3>
+        <p>The full-resolution master, delivered on an expiring private link and
+           fingerprinted to you. Includes a public certificate page.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-n">02</span><h3>Print</h3>
+        <p>Museum-grade giclée, printed and shipped on demand. Same art, on your wall.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-n">03</span><h3>Press</h3>
+        <p>A sweatshirt or long-sleeve carrying the piece and its own QR code —
+           scan it and you land on the certificate. Free with every master.</p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Vault progress — reads pieces owned on this device. Replaces itself with
+    // the real per-account count once the buyer signs in with their order email.
+    const owned = JSON.parse(localStorage.getItem('ft-owned') || '[]');
+    const dots = document.getElementById('vp-dots');
+    const label = document.getElementById('vp-label');
+    if (dots) {
+      dots.innerHTML = Array.from({ length: 12 }, (_, i) =>
+        `<span class="vp-dot${i < owned.length ? ' on' : ''}"></span>`).join('');
+      const left = Math.max(0, 12 - owned.length);
+      label.textContent = owned.length === 0
+        ? 'Your first piece starts the count. 12 opens the Vault.'
+        : left === 0
+          ? 'Vault unlocked. Check your email for access.'
+          : `${owned.length} of 12 — ${left} more to open the Vault.`;
+    }
+  </script>
+</Base>

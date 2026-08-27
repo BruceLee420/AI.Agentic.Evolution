@@ -1,0 +1,36 @@
+---
+import Base from '../../layouts/Base.astro';
+import ProtectedArt from '../../components/ProtectedArt.astro';
+import BuyButtons from '../../components/BuyButtons.astro';
+import PriceLadder from '../../components/PriceLadder.astro';
+import pieces from '../../data/pieces.json';
+
+export function getStaticPaths() {
+  return (pieces as any[]).map((p) => ({ params: { slug: p.id }, props: { piece: p } }));
+}
+const { piece } = Astro.props;
+---
+<Base title={`${piece.title} — FREETHINKERS.AI`} description={piece.story}>
+  <article class="piece-page">
+    <div class="piece-art">
+      <ProtectedArt pieceId={piece.id} title={piece.title} ratio={piece.ratio} />
+    </div>
+    <div class="details">
+      <h1>{piece.title}</h1>
+      <p class="piece-id">{piece.id} · Day {piece.day ?? '—'} · {piece.date}</p>
+      <p class="story">{piece.story}</p>
+
+      <PriceLadder pieceId={piece.id} />
+      <BuyButtons pieceId={piece.id} title={piece.title} />
+
+      <ul class="includes">
+        <li>Full-resolution master, fingerprinted to you</li>
+        <li>Public certificate at freethinkers.ai/a/{piece.id}</li>
+        <li>Free sweatshirt or long-sleeve with this piece's QR code</li>
+        <li>Counts toward the 12-piece Collector's Vault</li>
+      </ul>
+
+      <a class="back" href="/#gallery">← Back to the collection</a>
+    </div>
+  </article>
+</Base>

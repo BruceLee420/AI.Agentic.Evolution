@@ -1,0 +1,137 @@
+---
+/**
+ * Gallery — filterable grid of finished works with a protected lightbox.
+ *
+ * Art is drawn into <canvas> rather than <img> so the DOM carries no saveable
+ * source (see docs/01-art-protection.md, Layer 2). Tiles show a deterministic
+ * gradient until previews exist, so the gallery is presentable before upload.
+ */
+import pieces from '../data/pieces.json';
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
+---
+<section class="gallery-section" id="gallery">
+  <div class="section-head">
+    <h2>The collection</h2>
+    <div class="gallery-controls">
+      <button class="chip active" data-tag="" type="button">All</button>
+      {tags.map((t) => <button class="chip" data-tag={t} type="button">{t}</button>)}
+    </div>
+  </div>
+
+  <div class="gallery" id="gallery-grid"></div>
+</section>
+
+<div class="lightbox" id="ft-lightbox" hidden>
+  <button class="lb-close" id="ft-close" aria-label="Close">✕</button>
+  <button class="lb-nav lb-prev" id="ft-prev" aria-label="Previous">‹</button>
+  <figure class="lb-figure">
+    <canvas id="ft-canvas"></canvas>
+    <figcaption>
+      <div>
+        <strong id="ft-title"></strong>
+        <span id="ft-meta"></span>
+      </div>
+      <a class="button small" id="ft-link" href="#">Own this piece →</a>
+    </figcaption>
+  </figure>
+  <button class="lb-nav lb-next" id="ft-next" aria-label="Next">›</button>
+</div>
+
+<script type="application/json" id="piece-data" set:html={JSON.stringify(pieces)} />
+<script define:vars={{ API }}>
+  const ALL = JSON.parse(document.getElementById('piece-data').textContent);
+  const grid = document.getElementById('gallery-grid');
+  let view = ALL.slice();
+
+  const hue = (id) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
+  const placeholder = (id) =>
+    `linear-gradient(${hue(id)}deg, hsl(${hue(id)} 45% 25%), hsl(${(hue(id) + 50) % 360} 40% 12%))`;
+
+  function render() {
+    grid.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    view.forEach((p) => {
+      const el = document.createElement('article');
+      el.className = 'g-tile';
+      el.dataset.id = p.id;
+      el.style.setProperty('--ratio', p.ratio ?? '1 / 1');
+      el.innerHTML = `
+        <div class="g-art" style="background:${placeholder(p.id)}" data-src="${API}/img/${p.id}"></div>
+        <div class="g-info">
+          <h3>${p.title}</h3>
+          <span class="g-day">Day ${p.day ?? '—'} · ${p.date ?? ''}</span>
+        </div>`;
+      frag.appendChild(el);
+    });
+    grid.appendChild(frag);
+    lazy();
+  }
+
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) {
+      if (!e.isIntersecting) continue;
+      const d = e.target; io.unobserve(d);
+      const img = new Image();
+      img.onload = () => { d.style.backgroundImage = `url(${img.src})`; d.classList.add('loaded'); };
+      img.src = d.dataset.src;
+    }
+  }, { rootMargin: '300px' });
+  const lazy = () => grid.querySelectorAll('.g-art:not(.loaded)').forEach((d) => io.observe(d));
+
+  document.querySelector('.gallery-controls').addEventListener('click', (e) => {
+    const c = e.target.closest('.chip');
+    if (!c) return;
+    document.querySelectorAll('.chip').forEach((x) => x.classList.toggle('active', x === c));
+    const t = c.dataset.tag;
+    view = t ? ALL.filter((p) => (p.tags ?? []).includes(t)) : ALL.slice();
+    render();
+  });
+
+  /* ---- lightbox ---- */
+  const lb = document.getElementById('ft-lightbox');
+  const canvas = document.getElementById('ft-canvas');
+  let idx = -1;
+
+  function paint() {
+    const p = view[idx]; if (!p) return;
+    document.getElementById('ft-title').textContent = p.title;
+    document.getElementById('ft-meta').textContent = ` · ${p.id} · Day ${p.day ?? '—'}`;
+    document.getElementById('ft-link').href = `/art/${p.id}`;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { canvas.width = img.naturalWidth; canvas.height = img.naturalHeight; ctx.drawImage(img, 0, 0); };
+    img.onerror = () => {
+      canvas.width = 900; canvas.height = 900;
+      const g = ctx.createLinearGradient(0, 0, 900, 900);
+      g.addColorStop(0, `hsl(${hue(p.id)} 45% 25%)`);
+      g.addColorStop(1, `hsl(${(hue(p.id) + 50) % 360} 40% 12%)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 900, 900);
+      ctx.fillStyle = 'rgba(246,244,239,.55)'; ctx.font = '30px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`${p.title} — preview pending`, 450, 450);
+    };
+    img.src = `${API}/img/${p.id}`;
+  }
+  const open = (id) => { idx = view.findIndex((p) => p.id === id); paint(); lb.hidden = false; document.body.style.overflow = 'hidden'; };
+  const close = () => { lb.hidden = true; document.body.style.overflow = ''; };
+  const step = (d) => { idx = (idx + d + view.length) % view.length; paint(); };
+
+  grid.addEventListener('click', (e) => {
+    const t = e.target.closest('.g-tile'); if (t) open(t.dataset.id);
+  });
+  document.getElementById('ft-close').addEventListener('click', close);
+  document.getElementById('ft-prev').addEventListener('click', () => step(-1));
+  document.getElementById('ft-next').addEventListener('click', () => step(1));
+  lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  for (const ev of ['contextmenu', 'dragstart'])
+    document.addEventListener(ev, (e) => { if (e.target.closest('.g-art, .lb-figure')) e.preventDefault(); });
+
+  render();
+</script>

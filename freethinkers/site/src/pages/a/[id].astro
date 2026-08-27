@@ -1,0 +1,50 @@
+---
+/**
+ * Certificate page — where every QR code lands.
+ *
+ * Built for one scenario: a stranger sees the sweatshirt, scans the code, and
+ * within one screen gets the art, who owns it, and how to buy their own. The
+ * collector wearing the piece IS the storefront.
+ */
+import Base from '../../layouts/Base.astro';
+import ProtectedArt from '../../components/ProtectedArt.astro';
+import pieces from '../../data/pieces.json';
+
+export function getStaticPaths() {
+  return (pieces as any[]).map((p) => ({ params: { id: p.id }, props: { piece: p } }));
+}
+const { piece } = Astro.props;
+---
+<Base title={`Certificate — ${piece.title}`} description={`Certificate of authenticity for ${piece.id}`}>
+  <article class="certificate">
+    <p class="cert-kicker">Certificate of Authenticity</p>
+    <ProtectedArt pieceId={piece.id} title={piece.title} ratio={piece.ratio} />
+    <h1>{piece.title}</h1>
+    <p class="piece-id">{piece.id} · Day {piece.day ?? '—'} · {piece.date}</p>
+    <p class="owner" data-piece={piece.id}>Verifying ownership…</p>
+
+    <div class="cta-row">
+      <a class="button" href={`/art/${piece.id}`}>Own this piece</a>
+      <a class="button ghost" href="/#gallery">See the collection</a>
+    </div>
+
+    <p class="spotlight">
+      Spotted this piece in the wild? Tag <strong>@freethinkers.ai</strong> or send the
+      shot to <a href="mailto:spotted@freethinkers.ai">spotted@freethinkers.ai</a> —
+      the best photos get published right here on the certificate.
+    </p>
+  </article>
+
+  <script>
+    const el = document.querySelector('.owner');
+    const API = 'https://api.freethinkers.ai';
+    fetch(`${API}/api/certificate/${el.dataset.piece}`)
+      .then((r) => r.json())
+      .then((c) => {
+        el.textContent = c.owned
+          ? `Registered to ${c.ownerDisplay ?? 'a private collector'} · minted ${c.mintedAt}`
+          : 'This master is still available.';
+      })
+      .catch(() => { el.textContent = 'This master is still available.'; });
+  </script>
+</Base>

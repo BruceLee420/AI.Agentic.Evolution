@@ -1,0 +1,17 @@
+User-agent: *
+Disallow: /img/
+Disallow: /api/
+
+# AI training crawlers — explicit no (also enable Cloudflare's AI-crawler block)
+User-agent: GPTBot
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: anthropic-ai
+Disallow: /
+User-agent: Bytespider
+Disallow: /
+
+Sitemap: https://freethinkers.ai/sitemap-index.xml
