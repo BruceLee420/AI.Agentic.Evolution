@@ -268,21 +268,65 @@ async function describe(fileName, fullPath) {
 
 /* ---------------- run ---------------- */
 
-await mkdir(join(OUT, 'previews'), { recursive: true });
-await mkdir(join(OUT, 'masters'), { recursive: true });
+const IS_WIN = process.platform === 'win32';
 
-const catalog = await loadCatalog();
-const seen = new Set(catalog.map((r) => r.filename));
+// Validate the drop folder BEFORE creating anything. Creating empty output
+// folders and then failing is the worst possible outcome — it looks like the
+// run worked.
+let entries;
+try {
+  entries = await readdir(dropDir, { withFileTypes: true });
+} catch (e) {
+  console.error(`\n✘ Can't read the art folder:\n    ${dropDir}\n`);
+  console.error(e.code === 'ENOENT'
+    ? '  That path does not exist. Check the drive letter and spelling —\n'
+      + '  on Windows a Google Drive path usually looks like:\n'
+      + '    G:\\My Drive\\Art.Folder\\1-Drop\n'
+    : `  ${e.message}\n`);
+  process.exit(1);
+}
+
+const IMAGE_RE = /\.(png|jpe?g|tiff?|webp)$/i;
 // The signature lives alongside the art — never treat it as a piece.
 const SIG_NAME = SIGNATURE ? basename(SIGNATURE).toLowerCase() : '';
-const files = (await readdir(dropDir))
-  .filter((f) => /\.(png|jpe?g|tiff?|webp)$/i.test(f))
+const allNames = entries.filter((d) => d.isFile()).map((d) => d.name);
+const subdirs = entries.filter((d) => d.isDirectory()).map((d) => d.name);
+
+const files = allNames
+  .filter((f) => IMAGE_RE.test(f))
   .filter((f) => {
     const n = f.toLowerCase();
     return n !== SIG_NAME && !n.includes('signature');
   })
   .sort()
   .slice(0, LIMIT);
+
+if (files.length === 0) {
+  console.error(`\n✘ No images found in:\n    ${dropDir}\n`);
+  if (allNames.length === 0 && subdirs.length) {
+    console.error(`  That folder holds only sub-folders, no files:`);
+    subdirs.slice(0, 8).forEach((d) => console.error(`    ${d}${IS_WIN ? '\\' : '/'}`));
+    console.error(`\n  You've probably pointed at Art.Folder instead of the drop`);
+    console.error(`  folder inside it. Add the sub-folder to the path.\n`);
+  } else if (allNames.length) {
+    console.error(`  ${allNames.length} file(s) are there, but none are images:`);
+    allNames.slice(0, 8).forEach((f) => console.error(`    ${f}`));
+    console.error(`\n  Supported: .png .jpg .jpeg .tif .tiff .webp\n`);
+  } else {
+    console.error(`  The folder is empty.\n`);
+    console.error(`  If you use Google Drive for Desktop, the files may still be`);
+    console.error(`  syncing, or set to "online only". Right-click the folder and`);
+    console.error(`  choose "Available offline", wait for it to finish, then rerun.\n`);
+  }
+  process.exit(1);
+}
+
+// Path is good and there's work to do — now it's safe to create output folders.
+await mkdir(join(OUT, 'previews'), { recursive: true });
+await mkdir(join(OUT, 'masters'), { recursive: true });
+
+const catalog = await loadCatalog();
+const seen = new Set(catalog.map((r) => r.filename));
 
 console.log(`Drop folder: ${files.length} images · catalog: ${catalog.length} existing\n`);
 
