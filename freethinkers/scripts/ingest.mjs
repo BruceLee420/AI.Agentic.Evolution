@@ -31,7 +31,7 @@
  *   --force              reprocess images even if already done
  */
 import sharp from 'sharp';
-import { readdir, mkdir, readFile, writeFile, stat, access } from 'node:fs/promises';
+import { readdir, mkdir, readFile, writeFile, stat, access, copyFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseFilename, dayOfYear } from './parse-filename.mjs';
@@ -72,6 +72,9 @@ const SIG_MARGIN = Number(opt('--signature-margin', 24));
 // Take a first bite instead of the whole folder. Rerunning without --limit
 // picks up where you stopped, so a 5-file test costs you nothing.
 const LIMIT = Number(opt('--limit', Infinity));
+// Previews are copied into the site so it renders locally. Skip only if you're
+// serving images from R2 through the worker instead.
+const NO_PUBLISH = flag('--no-publish');
 const INK_RGB = INK_MODE === 'fixed'
   ? [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0)
   : [255, 255, 255];
@@ -492,6 +495,23 @@ for (const rec of catalog) {
   console.log(`✔ ${rec.id}  ${rec.title}  (${rec.date})`);
 }
 await saveCatalog(catalog);
+
+// 2b) Publish previews into the site so it can actually show them.
+// Without this the site points at the production API, which doesn't exist until
+// you deploy — so every piece renders "preview pending" on your own machine.
+if (!NO_PUBLISH) {
+  const pubDir = new URL('../site/public/art-previews/', import.meta.url);
+  await mkdir(pubDir, { recursive: true });
+  let copied = 0;
+  for (const rec of catalog) {
+    if (rec.dupe) continue;
+    const src = join(OUT, 'previews', `${rec.id}.png`);
+    if (!(await access(src).then(() => true).catch(() => false))) continue;
+    await copyFile(src, new URL(`${rec.id}.png`, pubDir));
+    copied++;
+  }
+  console.log(`\n✔ ${copied} preview(s) published to site/public/art-previews/`);
+}
 
 // 3) Rebuild the site catalog.
 // Display order: your manual `order` first (lowest number = first), then

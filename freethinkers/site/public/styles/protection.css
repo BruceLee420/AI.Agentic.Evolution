@@ -285,3 +285,12 @@ body.motion-on .g-badge { border-color: var(--accent); color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .g-video { transition: none; }
 }
+
+/* An author `display` rule outranks the UA stylesheet's [hidden]{display:none},
+   so without this the lightbox stays on screen permanently — covering the page
+   and ignoring its own close button. */
+.lightbox[hidden] { display: none !important; }
+.lb-close {
+  z-index: 70; padding: .35rem .6rem; line-height: 1;
+  border-radius: 50%; background: rgba(0,0,0,.45);
+}

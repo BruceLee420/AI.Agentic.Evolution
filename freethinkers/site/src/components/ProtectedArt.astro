@@ -8,9 +8,9 @@
  * logging) — see docs/01-art-protection.md.
  */
 const { pieceId, title, ratio = '1 / 1' } = Astro.props;
-const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
+const IMG = import.meta.env.PUBLIC_IMG_BASE ?? '/art-previews';
 ---
-<figure class="protected-art" data-piece={pieceId} data-src={`${API}/img/${pieceId}`}
+<figure class="protected-art" data-piece={pieceId} data-src={`${IMG}/${pieceId}.png`}
         style={`aspect-ratio:${ratio}`} aria-label={title}>
   <canvas></canvas>
   <figcaption class="watermark-card" aria-hidden="true">

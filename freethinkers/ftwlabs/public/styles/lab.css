@@ -216,3 +216,12 @@ button, input, select { font: inherit; }
 .thanks-next, .thanks-list { margin-bottom: 2.5rem; }
 .thanks-next p { color: var(--dim); line-height: 1.6; }
 .cta-row { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1.25rem; align-items: center; }
+
+/* An author `display` rule outranks the UA stylesheet's [hidden]{display:none},
+   so without this the lightbox stays on screen permanently — covering the page
+   and ignoring its own close button. */
+.lightbox[hidden] { display: none !important; }
+.lb-close {
+  z-index: 70; padding: .35rem .6rem; line-height: 1;
+  border-radius: 50%; background: rgba(0,0,0,.45);
+}

@@ -18,6 +18,10 @@
  * same way the 1080p still is.
  */
 import pieces from '../data/pieces.json';
+// Images come from the local folder ingest publishes into, so the site works
+// on your machine with no API deployed. Point PUBLIC_IMG_BASE at the worker
+// (https://api.freethinkers.ai/img) once R2 delivery is live.
+const IMG = import.meta.env.PUBLIC_IMG_BASE ?? '/art-previews';
 const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
 const CLIPS = import.meta.env.PUBLIC_CLIP_BASE ?? `${API}/clip`;
 const tags = [...new Set((pieces as any[]).flatMap((p) => p.tags ?? []))].sort();
@@ -65,7 +69,7 @@ const hasAnyClip = (pieces as any[]).some((p) => p.clip);
 </div>
 
 <script type="application/json" id="piece-data" set:html={JSON.stringify(pieces)} />
-<script define:vars={{ API, CLIPS }}>
+<script define:vars={{ IMG, CLIPS }}>
   const ALL = JSON.parse(document.getElementById('piece-data').textContent);
   const grid = document.getElementById('gallery-grid');
   let view = ALL.slice();
@@ -89,7 +93,7 @@ const hasAnyClip = (pieces as any[]).some((p) => p.clip);
       el.style.setProperty('--ratio', p.ratio ?? '1 / 1');
       el.innerHTML = `
         <div class="g-frame">
-          <div class="g-art" style="background:${placeholder(p.id)}" data-src="${API}/img/${p.id}"></div>
+          <div class="g-art" style="background:${placeholder(p.id)}" data-src="${IMG}/${p.id}.png"></div>
           ${p.clip ? '<span class="g-badge" title="This piece has a motion version">▶</span>' : ''}
         </div>
         <div class="g-info">
@@ -208,7 +212,7 @@ const hasAnyClip = (pieces as any[]).some((p) => p.clip);
       ctx.fillStyle = 'rgba(246,244,239,.55)'; ctx.font = '30px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(`${p.title} — preview pending`, 450, 450);
     };
-    img.src = `${API}/img/${p.id}`;
+    img.src = `${IMG}/${p.id}.png`;
   }
   const paintIfOpen = () => { if (!lb.hidden) paint(); };
 
