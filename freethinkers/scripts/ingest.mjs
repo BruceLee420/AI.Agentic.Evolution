@@ -33,6 +33,8 @@
 import sharp from 'sharp';
 import { readdir, mkdir, readFile, writeFile, stat, access } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { parseFilename, dayOfYear } from './parse-filename.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (f) => argv.includes(f);
@@ -78,7 +80,7 @@ if (!dropDir) {
  * clip   — optional video filename for the motion version of the piece.
  */
 const COLUMNS = ['id', 'filename', 'title', 'date', 'day', 'description', 'tags',
-  'ratio', 'order', 'score', 'clip', 'processed'];
+  'ratio', 'order', 'score', 'clip', 'review', 'dupe', 'processed'];
 
 function parseCSV(text) {
   const rows = [];
@@ -228,9 +230,13 @@ async function signPreview(previewBuf, dateLabel) {
   return sharp(previewBuf).composite(layers).png().toBuffer();
 }
 
-/* ---------------- date helpers ---------------- */
+/* ---------------- title + date ----------------
+ * Filenames carry the metadata (TITLE_YYYY-MM-DD_FINAL_3001.jpg), so the
+ * parser does the work. Where a filename's date is unusable — an impossible
+ * day, no date at all — we fall back to the file's own timestamp and mark the
+ * row `review` so it surfaces instead of quietly landing on a wrong day. */
 
-async function dateFor(file) {
+async function fileDate(file) {
   try {
     const meta = await sharp(file).metadata();
     const raw = meta.exif && meta.exif.toString('latin1').match(/(\d{4}):(\d{2}):(\d{2})/);
@@ -240,8 +246,17 @@ async function dateFor(file) {
   return new Date(s.mtime).toISOString().slice(0, 10);
 }
 
-const titleFrom = (file) =>
-  basename(file, extname(file)).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+async function describe(fileName, fullPath) {
+  const p = parseFilename(fileName, { fallbackYear: YEAR });
+  const date = p.date ?? (await fileDate(fullPath));
+  return {
+    title: p.title,
+    date,
+    day: dayOfYear(date),
+    confidence: p.confidence,
+    issues: p.issues,
+  };
+}
 
 /* ---------------- run ---------------- */
 
@@ -264,18 +279,21 @@ let nextDay = catalog.length
   ? Math.max(...catalog.map((r) => Number(r.day) || 0))
   : START_DAY - 1;
 
+const flagged = [];
 for (const f of files) {
   if (seen.has(f)) continue;
   const full = join(dropDir, f);
   const meta = await sharp(full).metadata().catch(() => ({}));
+  const info = await describe(f, full);
   nextNum += 1;
-  nextDay += 1;
+  if (info.confidence !== 'high') flagged.push({ file: f, ...info });
   catalog.push({
     id: `FT-${YEAR}-${String(nextNum).padStart(3, '0')}`,
     filename: f,
-    title: titleFrom(f),
-    date: await dateFor(full),
-    day: String(nextDay),
+    title: info.title,
+    date: info.date,
+    day: String(info.day ?? ++nextDay),
+    review: info.confidence === 'high' ? '' : info.issues.join('; '),
     description: '',
     tags: '',
     ratio: meta.width && meta.height
@@ -290,11 +308,42 @@ for (const f of files) {
 }
 await saveCatalog(catalog);
 
-// 2) Process anything not yet done.
+// 1b) Duplicate detection by content hash.
+// Filenames lie — SPACESUIT.3 appears on two different days, and near-identical
+// titles are common. Hashing the actual bytes finds true duplicates regardless
+// of what they're called. Dupes are marked, never deleted; that call is yours.
+const hashes = new Map();
+// Which copy survives matters, because the names differ even when the bytes
+// don't ("HAWK.EYE" vs "HAWK.EYE.COPY"). Check cleanly-dated rows first, then
+// shorter titles — so the original beats the copy instead of whichever
+// happened to sort first.
+const dedupeOrder = [...catalog].sort((a, b) => {
+  const ar = a.review ? 1 : 0, br = b.review ? 1 : 0;
+  if (ar !== br) return ar - br;
+  return (a.title ?? '').length - (b.title ?? '').length;
+});
+
+for (const rec of dedupeOrder) {
+  const src = join(dropDir, rec.filename);
+  if (!(await access(src).then(() => true).catch(() => false))) continue;
+  if (rec.dupe) continue;
+  const h = createHash('sha256').update(await readFile(src)).digest('hex').slice(0, 16);
+  if (hashes.has(h) && hashes.get(h) !== rec.id) {
+    rec.dupe = `identical to ${hashes.get(h)}`;
+  } else {
+    hashes.set(h, rec.id);
+    rec.dupe = '';
+  }
+}
+const dupes = catalog.filter((r) => r.dupe);
+await saveCatalog(catalog);
+
+// 2) Process anything not yet done. Exact duplicates are skipped.
 let processed = 0, missing = 0;
 for (const rec of catalog) {
   const src = join(dropDir, rec.filename);
   if (!(await access(src).then(() => true).catch(() => false))) { missing++; continue; }
+  if (rec.dupe) continue;
   if (rec.processed === 'yes' && !FORCE) continue;
 
   const dateLabel = rec.date;
@@ -355,11 +404,27 @@ await writeFile(
 );
 
 const noDesc = catalog.filter((r) => !r.description).length;
+const needReview = catalog.filter((r) => r.review);
+
 console.log(`
 ─────────────────────────────────────────────
  ${processed} processed · ${catalog.length} in catalog · ${pieces.length} live on the site
 ${missing ? ` ${missing} catalog rows have no file in the drop folder (kept, not processed)\n` : ''}${
-  noDesc ? ` ${noDesc} pieces still need a description — add them in ${CATALOG} and rerun.` : ' Every piece has a description.'}
+  noDesc ? ` ${noDesc} pieces still need a description — add them in ${CATALOG} and rerun.` : ' Every piece has a description.'}`);
+
+if (dupes.length) {
+  console.log(`\n ${dupes.length} exact duplicate(s) found by content hash — skipped, not deleted:`);
+  dupes.forEach((d) => console.log(`   ${d.filename}  →  ${d.dupe}`));
+  console.log(`   Clear the \`dupe\` column to force one through.`);
+}
+
+if (needReview.length) {
+  console.log(`\n ${needReview.length} date(s) I could not read cleanly. These used the file's own`);
+  console.log(` timestamp instead — check the \`date\` and \`day\` columns in ${CATALOG}:`);
+  needReview.forEach((r) => console.log(`   ${r.filename}\n     → ${r.date} (day ${r.day}) — ${r.review}`));
+}
+
+console.log(`
 
  Next:
    Previews → R2:  for f in ${OUT}/previews/*; do npx wrangler r2 object put "ft-public/previews/$(basename $f)" --file "$f"; done
