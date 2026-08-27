@@ -10,7 +10,7 @@ export function getStaticPaths() {
 }
 const { piece } = Astro.props;
 ---
-<Base title={`${piece.title} — FREETHINKERS.AI`} description={piece.story}>
+<Base title={`${piece.title} — FREETHINKERS.AI`} description={piece.story} image={`/og/${piece.id}.png`}>
   <article class="piece-page">
     <div class="piece-art">
       <ProtectedArt pieceId={piece.id} title={piece.title} ratio={piece.ratio} />

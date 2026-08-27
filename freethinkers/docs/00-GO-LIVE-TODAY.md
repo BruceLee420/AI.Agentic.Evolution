@@ -44,6 +44,12 @@ and put their URLs in the site env as `PUBLIC_PAY_URL_SINGLE`, `PUBLIC_PAY_URL_B
 `PUBLIC_PAY_URL_MINT`. Upload the actual files to the Gumroad products so delivery
 is automatic while the R2 + worker delivery path is still being wired.
 
+**Set each product's redirect URL to your `/thanks` page** —
+`https://ftwlabs.ai/thanks` and `https://freethinkers.ai/thanks?piece=FT-2026-001`.
+That page tells the buyer what happens next, clears their bundle so a refresh can't
+double-charge them, captures their email, and (on Freethinkers) ticks their Vault
+counter. Skipping it is how you generate "where is my file?" emails all night.
+
 > Gumroad's 10% stings, but 10% of a sale tonight beats 2% of a sale next week.
 > Switch to Snipcart the day it's approved — one env var, no code change.
 
@@ -116,6 +122,38 @@ Same for Freethinkers — 10–20 flagship pieces is a launch.
 > gradients and prices to base values. Ugly-but-live beats perfect-but-dark, and
 > you can upload real art incrementally while the site is already selling.
 
+## 4b. Share cards + discovery (10 min — do not skip)
+
+```bash
+cd freethinkers/scripts
+node make-og-images.mjs                          # branded gradient cards
+node make-og-images.mjs --previews ./out/previews # once real art exists
+```
+
+Generates a 1200×630 card for every piece and concept. A post with a real preview
+card gets meaningfully more clicks than a bare link, and tonight every click counts.
+The pages already reference them.
+
+Both sites also build a `/sitemap.xml` covering every piece, concept, and certificate
+page. Submit both in Google Search Console once the domains resolve. This does
+nothing tonight — it's what makes next month's traffic free.
+
+## 4c. The Vault (optional tonight, 5 min)
+
+Live at `/vault`, gated on 12+ pieces against the purchase email the worker tracks.
+Fill the three panels whenever you like, no redeploy needed:
+
+```bash
+npx wrangler kv key put --namespace-id $PRICING_NS "VAULT:ARCHIVE" \
+  '[{"label":"2026 masters — full archive","url":"https://…"}]'
+npx wrangler kv key put --namespace-id $PRICING_NS "VAULT:NEXT" \
+  '[{"label":"Next drop — first look","url":"https://…"}]'
+```
+
+**Recommendation, restated:** don't open the GitHub repo to 12+ buyers. A repo is a
+poor gallery, leaks permanently the moment one person forks it, and can't be
+revoked. The Vault gives the same reward, stays revocable, and looks like your brand.
+
 ## 5. The part that actually makes money tonight
 
 Everything above just removes obstacles. **Traffic is the product tonight**, and
@@ -163,15 +201,34 @@ first night. Anyone promising more is guessing.
 
 ```
 [ ] Gumroad: 3 products created, URLs copied
+[ ] Gumroad redirect URLs → /thanks on both sites
 [ ] Cloudflare Pages: 2 projects deployed, env vars set        → LIVE on *.pages.dev
 [ ] Domains added, nameservers swapped                         (can lag; not blocking)
 [ ] 100–200 concepts through the pipeline → concepts.json
 [ ] 10–20 finished pieces → pieces.json
+[ ] node make-og-images.mjs                                    → share cards
 [ ] One end-to-end test purchase — buy your own product, confirm the file arrives
 [ ] FIRSTNIGHT discount code live
 [ ] Posted to your audience + 10 personal messages
 [ ] Wix still running until freethinkers.ai verified on Pages
 ```
+
+## What's built and verified
+
+Everything below compiles and ran here — not sketches:
+
+| Piece | State |
+|---|---|
+| FTWlabs site | **147 pages build clean** (index, checkout, thanks, 144 concept pages, sitemap) |
+| Freethinkers site | **75 pages build clean** (gallery, 365 grid, vault, thanks, piece + certificate pages, sitemap) |
+| Share cards | **180 generated**, 1200×630, verified |
+| Price ladder | Verified: $300 → $336 → $376.32, matches the worker |
+| Art pipeline | All scripts syntax-clean; demo catalogs generated |
+| Worker | Pricing, image gate, signed delivery, webhooks, subscribe, reserve, vault |
+
+Both sites run on demo data today: previews fall back to generated gradients and
+prices to base values. **Deploy first, upload art second** — the site can be live
+and selling while you're still feeding it work.
 
 The one step people skip and regret: **buy your own product before you promote it.**
 A broken checkout discovered by your first real customer costs more than the ten

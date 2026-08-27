@@ -2,7 +2,9 @@
 const {
   title = 'FTWLABS — 3,000 concepts from the Freethinkers lab',
   description = 'Raw concepts, experiments, and studies. Own the masters for less than lunch.',
+  image = '/og/default.png',
 } = Astro.props;
+const ogImage = new URL(image, Astro.site ?? 'https://ftwlabs.ai').toString();
 const SNIPCART_KEY = import.meta.env.PUBLIC_SNIPCART_KEY ?? '';
 const PROVIDER = import.meta.env.PUBLIC_CHECKOUT_PROVIDER ?? 'gumroad';
 ---
@@ -17,6 +19,11 @@ const PROVIDER = import.meta.env.PUBLIC_CHECKOUT_PROVIDER ?? 'gumroad';
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <link rel="stylesheet" href="/styles/lab.css" />
     {PROVIDER === 'snipcart' && (
       <link rel="stylesheet" href="https://cdn.snipcart.com/themes/v3.7.1/default/snipcart.css" />
