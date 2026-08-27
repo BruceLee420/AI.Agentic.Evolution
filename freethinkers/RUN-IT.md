@@ -141,18 +141,27 @@ The signature is the one thing worth checking on the first piece before you run 
 180. Open `out/previews/FT-2026-001.png` and look at the bottom-right.
 
 ```bash
-# Signature too big or too small? (default is 22% of image width)
-# Edit SIG_WIDTH_PCT in ingest.mjs, or tell me and I'll add a flag.
+# Bigger / smaller (default 0.22 = 22% of image width)
+node ingest.mjs "$DROP" --signature "$SIG" --signature-width 0.30 --force
 
-# Signature hard to read on light artwork?
+# Hard to read on light artwork? Flip the ink to black
 node ingest.mjs "$DROP" --signature "$SIG" --signature-color "#000000" --force
 
-# Your PNG already has clean transparency, so keying is unnecessary:
+# Yours already has clean transparency, so skip the paper-keying entirely
 node ingest.mjs "$DROP" --signature "$SIG" --signature-keep-bg --force
+
+# Sitting too close to the edge
+node ingest.mjs "$DROP" --signature "$SIG" --signature-margin 48 --force
 ```
 
 `--force` reprocesses images already marked done. Without it, reruns skip finished
 work — which is what makes running this repeatedly cheap.
 
-**Run it on 5 files first.** Copy five into a scratch folder, run, look at the
-output, then point it at all 180.
+## Start with 5
+
+`--limit 5` processes the first five and stops. No copying, no scratch folder.
+Look at `out/previews/`, tune the signature if you want, then rerun **without**
+`--limit` — it picks up the remaining 175 and skips the five already done.
+
+Your `Signature.png` lives in `1-Drop` alongside the art; ingest excludes it
+automatically, so it never becomes a piece.
