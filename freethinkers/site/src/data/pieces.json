@@ -1,26 +1,26 @@
 [
   {
-    "id": "FT-2026-005",
-    "title": "SYSTEM ERROR",
+    "id": "FT-2026-002",
+    "title": "HOMOSAPIENS 2.0",
     "story": "",
-    "date": "2026-05-06",
-    "day": 126,
-    "ratio": "1 / 1",
+    "date": "2026-05-09",
+    "day": 129,
+    "ratio": "2400 / 3000",
     "editionSize": 120,
     "tags": []
   },
   {
     "id": "FT-2026-003",
-    "title": "HOMOSAPIENS 2.0",
+    "title": "OCTA PUNK",
     "story": "",
-    "date": "2026-05-09",
-    "day": 129,
+    "date": "2026-06-02",
+    "day": 153,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []
   },
   {
-    "id": "FT-2026-002",
+    "id": "FT-2026-001",
     "title": "HAWK EYE",
     "story": "",
     "date": "2026-06-10",
@@ -30,28 +30,8 @@
     "tags": []
   },
   {
-    "id": "FT-2026-001",
-    "title": "HAWK EYE COPY",
-    "story": "",
-    "date": "2026-06-11",
-    "day": 162,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
     "id": "FT-2026-004",
-    "title": "SATELITE",
-    "story": "",
-    "date": "2026-08-27",
-    "day": 239,
-    "ratio": "1 / 1",
-    "editionSize": 120,
-    "tags": []
-  },
-  {
-    "id": "FT-2026-006",
-    "title": "arttest",
+    "title": "WAR",
     "story": "",
     "date": "2026-08-27",
     "day": 239,

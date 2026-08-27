@@ -62,6 +62,10 @@ const PAPER_LEVEL = Number(opt('--paper-level', 210)); // luma at/above this = p
 const INK_FLOOR = Number(opt('--ink-floor', 90));      // luma at/below this = solid ink
 const INK_HEX = opt('--signature-color', '#ffffff');
 const TRIM_THRESHOLD = Number(opt('--trim-threshold', 15)); // paper-margin tolerance
+// Signature width as a share of the image width. 0.22 reads clearly at gallery
+// thumbnail size without competing with the artwork.
+const SIG_WIDTH = Number(opt('--signature-width', 0.22));
+const SIG_MARGIN = Number(opt('--signature-margin', 24));
 const INK_RGB = [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0);
 
 if (!dropDir) {
@@ -180,7 +184,7 @@ const dateSVG = (w, h, dateLabel) => Buffer.from(`
  * it composited exactly as-is.
  */
 async function prepareSignature(w) {
-  const sigW = Math.round(w * 0.22);
+  const sigW = Math.round(w * SIG_WIDTH);
   // Trim the paper margin first, so the ink itself is what gets scaled and
   // placed. Without this, a signature photographed with lots of empty paper
   // around it lands on the artwork tiny and floating off-position.
@@ -220,9 +224,10 @@ async function signPreview(previewBuf, dateLabel) {
     const sigH = (await sharp(sig).metadata()).height;
     // Soft shadow behind the mark so it survives light passages in the art.
     const shadow = await sharp(sig).blur(3).toBuffer();
-    const left = w - (await sharp(sig).metadata()).width - 24;
-    layers.push({ input: shadow, left, top: h - sigH - 38 });
-    layers.push({ input: sig, left, top: h - sigH - 40 });
+    const left = w - (await sharp(sig).metadata()).width - SIG_MARGIN;
+    const top = h - sigH - SIG_MARGIN - 16;   // leaves room for the date line
+    layers.push({ input: shadow, left, top: top + 2 });
+    layers.push({ input: sig, left, top });
     layers.push({ input: dateSVG(w, h, dateLabel) });
   } else {
     layers.push({ input: signatureSVG(w, h, dateLabel) });
