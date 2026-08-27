@@ -1,0 +1,93 @@
+---
+import Base from '../layouts/Base.astro';
+import ConceptExplorer from '../components/ConceptExplorer.astro';
+import concepts from '../data/concepts.json';
+
+const SINGLE = Number(import.meta.env.PUBLIC_CONCEPT_PRICE ?? 19);
+const BUNDLE_SIZE = Number(import.meta.env.PUBLIC_BUNDLE_SIZE ?? 10);
+const BUNDLE_PRICE = Number(import.meta.env.PUBLIC_BUNDLE_PRICE ?? 99);
+const save = Math.round((1 - BUNDLE_PRICE / (BUNDLE_SIZE * SINGLE)) * 100);
+---
+<Base>
+  <section class="hero">
+    <p class="kicker">The lab behind Freethinkers.AI</p>
+    <h1>{concepts.length.toLocaleString()} concepts.<br />Every one for sale.</h1>
+    <p class="sub">
+      These are the studies, dead ends, and breakthroughs that finished works are made of.
+      Raw, unpolished, and cheap on purpose — ${SINGLE} a master, or any
+      <strong>{BUNDLE_SIZE} for ${BUNDLE_PRICE}</strong> ({save}% off).
+    </p>
+    <div class="hero-cta">
+      <a href="#explore" class="cta">Start exploring →</a>
+      <a href="#bundles" class="ghost-link">How bundles work</a>
+    </div>
+    <ul class="trust">
+      <li>Instant digital delivery</li>
+      <li>Full-resolution masters</li>
+      <li>Personal + commercial license</li>
+    </ul>
+  </section>
+
+  <ConceptExplorer />
+
+  <section class="bundles" id="bundles">
+    <h2>Bundles</h2>
+    <div class="tiers">
+      <div class="tier">
+        <span class="tier-n">1</span>
+        <p class="tier-p">${SINGLE}</p>
+        <p class="tier-d">One master. Pick anything in the lab.</p>
+      </div>
+      <div class="tier featured">
+        <span class="badge">Best value</span>
+        <span class="tier-n">{BUNDLE_SIZE}</span>
+        <p class="tier-p">${BUNDLE_PRICE}</p>
+        <p class="tier-d">Any {BUNDLE_SIZE} concepts — {save}% off. Most people start here.</p>
+      </div>
+      <div class="tier">
+        <span class="tier-n">{BUNDLE_SIZE}+</span>
+        <p class="tier-p">+$8 <span>each</span></p>
+        <p class="tier-d">Keep going. Every extra concept past {BUNDLE_SIZE} is $8.</p>
+      </div>
+    </div>
+    <p class="bundle-note">
+      Select concepts anywhere on this page — your bundle follows you and the price
+      updates live at the bottom of the screen.
+    </p>
+  </section>
+
+  <section class="capture">
+    <h2>Get first look at new drops</h2>
+    <p>New concepts land most weeks. Subscribers see them before they're public — and get a code for their first bundle.</p>
+    <form class="signup" id="signup">
+      <input type="email" name="email" required placeholder="you@email.com" aria-label="Email" />
+      <button class="cta" type="submit">Notify me</button>
+    </form>
+    <p class="form-msg" id="signup-msg" hidden></p>
+  </section>
+
+  <script>
+    // Email capture → worker. Falls back to a mailto so the form is never a
+    // dead end before the API is deployed.
+    const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.ftwlabs.ai';
+    const form = document.getElementById('signup');
+    const msg = document.getElementById('signup-msg');
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = new FormData(form).get('email');
+      try {
+        const r = await fetch(`${API}/api/subscribe`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, list: 'ftwlabs' }),
+        });
+        if (!r.ok) throw new Error('bad status');
+        msg.textContent = "You're on the list. Watch your inbox.";
+      } catch {
+        msg.textContent = 'Signup is warming up — email hello@ftwlabs.ai and I’ll add you by hand.';
+      }
+      msg.hidden = false;
+      form.reset();
+    });
+  </script>
+</Base>

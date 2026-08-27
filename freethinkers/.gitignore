@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.astro/
+.env
+.wrangler/
+out/
+qr/
+printfiles/
+concepts-manifest.json
+*.log

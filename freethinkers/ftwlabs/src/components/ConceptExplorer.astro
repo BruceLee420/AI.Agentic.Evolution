@@ -1,0 +1,321 @@
+---
+/**
+ * ConceptExplorer — the FTWlabs storefront in one component.
+ *
+ * Built to make 3,000 items feel browsable and to raise average order value:
+ *   · search-as-you-type + tag filters + sort, all client-side (no round trips)
+ *   · infinite scroll (IntersectionObserver) so 3k items cost one 300KB JSON
+ *   · bundle builder — the real revenue lever: 10 for $99 vs $19 each
+ *   · lightbox with keyboard nav, art drawn to canvas (no saveable <img src>)
+ *
+ * Data: src/data/concepts.json (written by scripts/migrate-concepts.mjs).
+ * Tiles render a deterministic gradient until real previews are uploaded, so
+ * the site looks alive before the art pipeline has run.
+ */
+import concepts from '../data/concepts.json';
+
+const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.ftwlabs.ai';
+const SINGLE = Number(import.meta.env.PUBLIC_CONCEPT_PRICE ?? 19);
+const BUNDLE_SIZE = Number(import.meta.env.PUBLIC_BUNDLE_SIZE ?? 10);
+const BUNDLE_PRICE = Number(import.meta.env.PUBLIC_BUNDLE_PRICE ?? 99);
+const EXTRA = Number(import.meta.env.PUBLIC_BUNDLE_EXTRA ?? 8);
+
+const tags = [...new Set(concepts.flatMap((c: any) => c.tags ?? []))].sort();
+---
+
+<section class="explorer" id="explore">
+  <div class="controls">
+    <input id="q" type="search" placeholder={`Search ${concepts.length.toLocaleString()} concepts…`} autocomplete="off" />
+    <select id="sort">
+      <option value="new">Newest first</option>
+      <option value="old">Oldest first</option>
+      <option value="random">Shuffle</option>
+    </select>
+    <button id="shuffle" class="ghost" type="button">🎲 Surprise me</button>
+    <span id="count" class="count"></span>
+  </div>
+
+  <div class="tagrow" id="tagrow">
+    <button class="tag active" data-tag="" type="button">All</button>
+    {tags.map((t) => <button class="tag" data-tag={t} type="button">{t}</button>)}
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div id="sentinel" class="sentinel"></div>
+  <p id="empty" class="empty" hidden>No concepts match that. Try another word or clear the filters.</p>
+</section>
+
+<!-- Sticky bundle bar: the AOV engine -->
+<div class="bundlebar" id="bundlebar" hidden>
+  <div class="bb-left">
+    <strong id="bb-count">0</strong> selected
+    <span id="bb-hint" class="bb-hint"></span>
+  </div>
+  <div class="bb-right">
+    <span class="bb-was" id="bb-was"></span>
+    <span class="bb-price" id="bb-price">$0</span>
+    <button id="bb-clear" class="ghost" type="button">Clear</button>
+    <button id="bb-buy" class="cta" type="button">Checkout →</button>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-close" id="lb-close" aria-label="Close">✕</button>
+  <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
+  <figure class="lb-figure">
+    <canvas id="lb-canvas"></canvas>
+    <figcaption>
+      <span id="lb-id"></span>
+      <button class="cta small" id="lb-add" type="button">Add to bundle</button>
+    </figcaption>
+  </figure>
+  <button class="lb-nav lb-next" id="lb-next" aria-label="Next">›</button>
+</div>
+
+<script type="application/json" id="concept-data" set:html={JSON.stringify(concepts)} />
+<script
+  define:vars={{ API, SINGLE, BUNDLE_SIZE, BUNDLE_PRICE, EXTRA }}
+>
+  const ALL = JSON.parse(document.getElementById('concept-data').textContent);
+  const PAGE = 60;
+
+  const grid = document.getElementById('grid');
+  const sentinel = document.getElementById('sentinel');
+  const countEl = document.getElementById('count');
+  const emptyEl = document.getElementById('empty');
+
+  let view = ALL.slice();
+  let shown = 0;
+  let activeTag = '';
+  let query = '';
+  const selected = new Set(JSON.parse(localStorage.getItem('ftw-bundle') || '[]'));
+
+  /* ---------- pricing (mirrors the worker; keep both in sync) ---------- */
+  function bundlePrice(n) {
+    if (n <= 0) return 0;
+    if (n < BUNDLE_SIZE) return n * SINGLE;
+    return BUNDLE_PRICE + (n - BUNDLE_SIZE) * EXTRA;
+  }
+
+  /* ---------- deterministic placeholder so the grid looks alive ---------- */
+  function hue(id) {
+    let h = 0;
+    for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return h;
+  }
+  function placeholder(id) {
+    const h = hue(id);
+    return `linear-gradient(${h}deg, hsl(${h} 70% 22%), hsl(${(h + 60) % 360} 65% 12%))`;
+  }
+
+  /* ---------- rendering ---------- */
+  function tile(c) {
+    const el = document.createElement('button');
+    el.className = 'tile' + (selected.has(c.id) ? ' picked' : '');
+    el.type = 'button';
+    el.dataset.id = c.id;
+    el.style.background = placeholder(c.id);
+    el.innerHTML = `
+      <span class="tile-img" data-src="${API}/img/${c.id}"></span>
+      <span class="tile-meta">
+        <span class="tile-id">${c.id}</span>
+        <span class="tile-pick">${selected.has(c.id) ? '✓ in bundle' : '+ add'}</span>
+      </span>`;
+    return el;
+  }
+
+  function renderMore() {
+    const slice = view.slice(shown, shown + PAGE);
+    const frag = document.createDocumentFragment();
+    slice.forEach((c) => frag.appendChild(tile(c)));
+    grid.appendChild(frag);
+    shown += slice.length;
+    lazyLoad();
+  }
+
+  function reset() {
+    grid.innerHTML = '';
+    shown = 0;
+    countEl.textContent = `${view.length.toLocaleString()} concept${view.length === 1 ? '' : 's'}`;
+    emptyEl.hidden = view.length > 0;
+    renderMore();
+  }
+
+  /* Load previews only when scrolled near — 3k images must never all fetch. */
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const span = e.target;
+        io.unobserve(span);
+        const img = new Image();
+        img.onload = () => {
+          span.style.backgroundImage = `url(${img.src})`;
+          span.classList.add('loaded');
+        };
+        img.src = span.dataset.src;
+      }
+    },
+    { rootMargin: '400px' }
+  );
+  function lazyLoad() {
+    grid.querySelectorAll('.tile-img:not(.loaded)').forEach((s) => io.observe(s));
+  }
+
+  /* Infinite scroll */
+  new IntersectionObserver((e) => {
+    if (e[0].isIntersecting && shown < view.length) renderMore();
+  }, { rootMargin: '600px' }).observe(sentinel);
+
+  /* ---------- filtering ---------- */
+  function applyFilters() {
+    const q = query.trim().toLowerCase();
+    view = ALL.filter((c) => {
+      if (activeTag && !(c.tags ?? []).includes(activeTag)) return false;
+      if (!q) return true;
+      return (
+        c.id.toLowerCase().includes(q) ||
+        (c.title ?? '').toLowerCase().includes(q) ||
+        (c.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      );
+    });
+    const sort = document.getElementById('sort').value;
+    if (sort === 'old') view.reverse();
+    else if (sort === 'random') view.sort(() => Math.random() - 0.5);
+    reset();
+  }
+
+  let debounce;
+  document.getElementById('q').addEventListener('input', (e) => {
+    query = e.target.value;
+    clearTimeout(debounce);
+    debounce = setTimeout(applyFilters, 120);
+  });
+  document.getElementById('sort').addEventListener('change', applyFilters);
+  document.getElementById('shuffle').addEventListener('click', () => {
+    document.getElementById('sort').value = 'random';
+    applyFilters();
+    window.scrollTo({ top: document.getElementById('explore').offsetTop, behavior: 'smooth' });
+  });
+  document.getElementById('tagrow').addEventListener('click', (e) => {
+    const b = e.target.closest('.tag');
+    if (!b) return;
+    activeTag = b.dataset.tag;
+    document.querySelectorAll('.tag').forEach((t) => t.classList.toggle('active', t === b));
+    applyFilters();
+  });
+
+  /* ---------- bundle ---------- */
+  const bar = document.getElementById('bundlebar');
+  function syncBundle() {
+    const n = selected.size;
+    bar.hidden = n === 0;
+    document.getElementById('bb-count').textContent = n;
+    const price = bundlePrice(n);
+    document.getElementById('bb-price').textContent = `$${price}`;
+    const full = n * SINGLE;
+    const wasEl = document.getElementById('bb-was');
+    wasEl.textContent = price < full ? `$${full}` : '';
+    const need = BUNDLE_SIZE - n;
+    document.getElementById('bb-hint').textContent =
+      need > 0
+        ? `— add ${need} more for the $${BUNDLE_PRICE} bundle (save $${n + need > 0 ? (BUNDLE_SIZE * SINGLE - BUNDLE_PRICE) : 0})`
+        : `— bundle price unlocked 🎉`;
+    localStorage.setItem('ftw-bundle', JSON.stringify([...selected]));
+    grid.querySelectorAll('.tile').forEach((t) => {
+      const on = selected.has(t.dataset.id);
+      t.classList.toggle('picked', on);
+      const pick = t.querySelector('.tile-pick');
+      if (pick) pick.textContent = on ? '✓ in bundle' : '+ add';
+    });
+  }
+
+  function toggle(id) {
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    syncBundle();
+  }
+
+  grid.addEventListener('click', (e) => {
+    const t = e.target.closest('.tile');
+    if (!t) return;
+    // Clicking the meta strip toggles selection; the image opens the lightbox.
+    if (e.target.closest('.tile-meta')) toggle(t.dataset.id);
+    else openLightbox(t.dataset.id);
+  });
+
+  document.getElementById('bb-clear').addEventListener('click', () => {
+    selected.clear();
+    syncBundle();
+  });
+
+  document.getElementById('bb-buy').addEventListener('click', () => {
+    const ids = [...selected];
+    // Hand the selection to checkout. The link rails carry it as a query string
+    // so the order confirmation (and you) can see exactly what was bought.
+    const payload = encodeURIComponent(ids.join(','));
+    const url = `/checkout?items=${payload}&n=${ids.length}&total=${bundlePrice(ids.length)}`;
+    window.location.href = url;
+  });
+
+  /* ---------- lightbox ---------- */
+  const lb = document.getElementById('lightbox');
+  const lbCanvas = document.getElementById('lb-canvas');
+  let lbIndex = -1;
+
+  function openLightbox(id) {
+    lbIndex = view.findIndex((c) => c.id === id);
+    paint();
+    lb.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  function paint() {
+    const c = view[lbIndex];
+    if (!c) return;
+    document.getElementById('lb-id').textContent = c.title ? `${c.id} · ${c.title}` : c.id;
+    document.getElementById('lb-add').textContent = selected.has(c.id) ? '✓ In bundle' : 'Add to bundle';
+    const ctx = lbCanvas.getContext('2d');
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      lbCanvas.width = img.naturalWidth;
+      lbCanvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+    };
+    img.onerror = () => {
+      // No preview uploaded yet — draw the placeholder so the UI still works.
+      lbCanvas.width = 800; lbCanvas.height = 800;
+      const g = ctx.createLinearGradient(0, 0, 800, 800);
+      g.addColorStop(0, `hsl(${hue(c.id)} 70% 22%)`);
+      g.addColorStop(1, `hsl(${(hue(c.id) + 60) % 360} 65% 12%)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 800, 800);
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '32px sans-serif';
+      ctx.textAlign = 'center'; ctx.fillText(c.id, 400, 400);
+    };
+    img.src = `${API}/img/${c.id}`;
+  }
+  function close() { lb.hidden = true; document.body.style.overflow = ''; }
+  function step(d) { lbIndex = (lbIndex + d + view.length) % view.length; paint(); }
+
+  document.getElementById('lb-close').addEventListener('click', close);
+  document.getElementById('lb-prev').addEventListener('click', () => step(-1));
+  document.getElementById('lb-next').addEventListener('click', () => step(1));
+  document.getElementById('lb-add').addEventListener('click', () => { toggle(view[lbIndex].id); paint(); });
+  lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+
+  /* Deterrence on art surfaces (see docs/01-art-protection.md) */
+  for (const evt of ['contextmenu', 'dragstart']) {
+    document.addEventListener(evt, (e) => {
+      if (e.target.closest('.tile, .lb-figure')) e.preventDefault();
+    });
+  }
+
+  applyFilters();
+  syncBundle();
+</script>

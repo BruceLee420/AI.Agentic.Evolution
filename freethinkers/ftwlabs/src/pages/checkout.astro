@@ -1,0 +1,98 @@
+---
+/**
+ * Checkout hand-off.
+ *
+ * Reads the bundle from the query string, shows the buyer exactly what they're
+ * getting, captures their email, records the selection with the API (so you can
+ * fulfil and so an abandoned cart is still a lead), then sends them to the
+ * active payment rail.
+ *
+ * The link rails (Gumroad / Stripe Payment Link) can't itemise 10 arbitrary
+ * picks, so the selection is recorded server-side against the buyer's email and
+ * echoed in the order note. That's what makes selling day one possible without
+ * waiting on cart approval.
+ */
+import Base from '../layouts/Base.astro';
+
+const PROVIDER = import.meta.env.PUBLIC_CHECKOUT_PROVIDER ?? 'gumroad';
+const PAY_SINGLE = import.meta.env.PUBLIC_PAY_URL_SINGLE ?? '';
+const PAY_BUNDLE = import.meta.env.PUBLIC_PAY_URL_BUNDLE ?? '';
+const BUNDLE_SIZE = Number(import.meta.env.PUBLIC_BUNDLE_SIZE ?? 10);
+---
+<Base title="Checkout — FTWLABS">
+  <section class="checkout">
+    <h1>Your bundle</h1>
+    <div id="summary" class="summary">Loading your selection…</div>
+
+    <form id="pay-form" class="pay-form">
+      <label for="email">Where should the files go?</label>
+      <input id="email" type="email" required placeholder="you@email.com" />
+      <p class="fineprint">
+        We record your picks against this address so your masters land in the right inbox.
+      </p>
+      <button class="cta big" type="submit" id="pay-btn">Continue to payment →</button>
+      <p class="form-msg" id="pay-msg" hidden></p>
+    </form>
+
+    <a href="/#explore" class="back">← Keep browsing</a>
+  </section>
+
+  <script define:vars={{ PROVIDER, PAY_SINGLE, PAY_BUNDLE, BUNDLE_SIZE }}>
+    const API = 'https://api.ftwlabs.ai';
+    const params = new URLSearchParams(location.search);
+    const items = (params.get('items') || '').split(',').filter(Boolean);
+    const total = Number(params.get('total') || 0);
+
+    const summary = document.getElementById('summary');
+    if (!items.length) {
+      summary.innerHTML =
+        '<p>Your bundle is empty. <a href="/#explore">Pick some concepts</a> first.</p>';
+      document.getElementById('pay-form').hidden = true;
+    } else {
+      summary.innerHTML = `
+        <p class="sum-line"><strong>${items.length}</strong> concept${items.length === 1 ? '' : 's'}
+          — <strong class="sum-total">$${total}</strong></p>
+        <ul class="sum-list">${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
+    }
+
+    document.getElementById('pay-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const btn = document.getElementById('pay-btn');
+      const msg = document.getElementById('pay-msg');
+      btn.disabled = true;
+      btn.textContent = 'Recording your picks…';
+
+      // Record first so the order is recoverable even if payment drops out.
+      let ref = '';
+      try {
+        const r = await fetch(`${API}/api/reserve`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, items, total }),
+        });
+        if (r.ok) ref = (await r.json()).ref ?? '';
+      } catch {
+        // API not up yet — proceed to payment anyway; the note carries the picks.
+      }
+
+      const base = items.length >= BUNDLE_SIZE ? PAY_BUNDLE : PAY_SINGLE;
+      if (!base) {
+        msg.textContent =
+          'Payment link not configured yet. Set PUBLIC_PAY_URL_SINGLE / _BUNDLE in the site env.';
+        msg.hidden = false;
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment →';
+        return;
+      }
+
+      // Pass buyer + picks through to the payment page where the rail supports it.
+      const url = new URL(base);
+      url.searchParams.set('email', email);
+      url.searchParams.set('quantity', String(items.length));
+      if (ref) url.searchParams.set('ref', ref);
+      url.searchParams.set('note', items.join(','));
+      location.href = url.toString();
+    });
+  </script>
+</Base>

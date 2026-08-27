@@ -1,0 +1,52 @@
+---
+const {
+  title = 'FTWLABS — 3,000 concepts from the Freethinkers lab',
+  description = 'Raw concepts, experiments, and studies. Own the masters for less than lunch.',
+} = Astro.props;
+const SNIPCART_KEY = import.meta.env.PUBLIC_SNIPCART_KEY ?? '';
+const PROVIDER = import.meta.env.PUBLIC_CHECKOUT_PROVIDER ?? 'gumroad';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noimageindex" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="/styles/lab.css" />
+    {PROVIDER === 'snipcart' && (
+      <link rel="stylesheet" href="https://cdn.snipcart.com/themes/v3.7.1/default/snipcart.css" />
+    )}
+  </head>
+  <body>
+    <header class="bar">
+      <a href="/" class="brand">FTW<span>LABS</span></a>
+      <nav>
+        <a href="/#explore">Explore</a>
+        <a href="/#bundles">Bundles</a>
+        <a href="https://freethinkers.ai" rel="noopener" class="sister">Freethinkers.AI →</a>
+      </nav>
+    </header>
+
+    <slot />
+
+    <footer class="foot">
+      <p><strong>FTWLABS</strong> is the concept lab behind <a href="https://freethinkers.ai">Freethinkers.AI</a>.</p>
+      <p class="fine">
+        Every file is watermarked and tracked. Concepts are sold as digital masters —
+        finished, protected works live on Freethinkers.AI.
+      </p>
+    </footer>
+
+    {PROVIDER === 'snipcart' && (
+      <>
+        <div hidden id="snipcart" data-api-key={SNIPCART_KEY} data-config-modal-style="side"></div>
+        <script async src="https://cdn.snipcart.com/themes/v3.7.1/default/snipcart.js"></script>
+      </>
+    )}
+  </body>
+</html>
