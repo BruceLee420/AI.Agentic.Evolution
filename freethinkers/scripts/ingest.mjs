@@ -54,6 +54,14 @@ const ARTIST = opt('--artist', 'Adrian A. Grimaldo');
 const START_DAY = Number(opt('--start-day', 1));
 const FORCE = flag('--force');
 
+// Signature keying. Defaults suit dark ink photographed on white paper.
+const KEEP_BG = flag('--signature-keep-bg');       // already a clean transparent PNG
+const PAPER_LEVEL = Number(opt('--paper-level', 210)); // luma at/above this = paper
+const INK_FLOOR = Number(opt('--ink-floor', 90));      // luma at/below this = solid ink
+const INK_HEX = opt('--signature-color', '#ffffff');
+const TRIM_THRESHOLD = Number(opt('--trim-threshold', 15)); // paper-margin tolerance
+const INK_RGB = [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0);
+
 if (!dropDir) {
   console.error('usage: node ingest.mjs <dropFolder> [--signature sig.png] [--artist "Name"]');
   process.exit(1);
@@ -147,17 +155,63 @@ const dateSVG = (w, h, dateLabel) => Buffer.from(`
           fill="#ffffff" opacity="0.75" letter-spacing="1.5">${esc(dateLabel)}</text>
   </svg>`);
 
+/**
+ * Turns a signature file into a clean transparent overlay.
+ *
+ * Handles the common case: you signed a sheet of paper and photographed or
+ * scanned it, so you have a JPEG of dark ink on a light background. JPEG can't
+ * store transparency, so pasting it directly would drop a white box on your
+ * art. This keys the paper out by luminance — darker pixel means more opaque —
+ * which preserves the soft edges of the pen stroke instead of hard-cutting it.
+ *
+ * The ink is then recoloured (white by default) so it reads on dark artwork.
+ * Pass --signature-keep-bg if you already have a clean transparent PNG and want
+ * it composited exactly as-is.
+ */
+async function prepareSignature(w) {
+  const sigW = Math.round(w * 0.22);
+  // Trim the paper margin first, so the ink itself is what gets scaled and
+  // placed. Without this, a signature photographed with lots of empty paper
+  // around it lands on the artwork tiny and floating off-position.
+  const trimmed = await sharp(SIGNATURE)
+    .trim({ threshold: TRIM_THRESHOLD })
+    .toBuffer()
+    .catch(() => sharp(SIGNATURE).toBuffer()); // uniform image: nothing to trim
+  const resized = sharp(trimmed).resize({ width: sigW });
+
+  if (KEEP_BG) return resized.png().toBuffer();
+
+  const { data, info } = await resized.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const ch = info.channels;
+  const [cr, cg, cb] = INK_RGB;
+
+  for (let i = 0; i < data.length; i += ch) {
+    // Rec. 601 luma — good enough for separating ink from paper.
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    // Fully opaque at/below INK_FLOOR, fully clear at/above PAPER_LEVEL.
+    let alpha = ((PAPER_LEVEL - lum) / (PAPER_LEVEL - INK_FLOOR)) * 255;
+    alpha = Math.max(0, Math.min(255, alpha));
+    data[i] = cr; data[i + 1] = cg; data[i + 2] = cb;
+    if (ch === 4) data[i + 3] = Math.round(alpha);
+  }
+
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: ch } })
+    .png().toBuffer();
+}
+
 async function signPreview(previewBuf, dateLabel) {
   const { width: w, height: h } = await sharp(previewBuf).metadata();
   const layers = [];
 
   const hasSig = SIGNATURE && (await access(SIGNATURE).then(() => true).catch(() => false));
   if (hasSig) {
-    // Scale the signature to ~22% of image width, bottom-right above the date.
-    const sigW = Math.round(w * 0.22);
-    const sig = await sharp(SIGNATURE).resize({ width: sigW }).png().toBuffer();
+    const sig = await prepareSignature(w);
     const sigH = (await sharp(sig).metadata()).height;
-    layers.push({ input: sig, left: w - sigW - 24, top: h - sigH - 40 });
+    // Soft shadow behind the mark so it survives light passages in the art.
+    const shadow = await sharp(sig).blur(3).toBuffer();
+    const left = w - (await sharp(sig).metadata()).width - 24;
+    layers.push({ input: shadow, left, top: h - sigH - 38 });
+    layers.push({ input: sig, left, top: h - sigH - 40 });
     layers.push({ input: dateSVG(w, h, dateLabel) });
   } else {
     layers.push({ input: signatureSVG(w, h, dateLabel) });
