@@ -7,15 +7,31 @@ import pieces from '../data/pieces.json';
 
 const featured = pieces[0];
 const BASE = Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300);
+const ARTIST = import.meta.env.PUBLIC_ARTIST ?? 'Adrian A. Grimaldo';
+const ALIAS = import.meta.env.PUBLIC_ALIAS ?? 'VoxMOHAWK';
+// The streak counts itself — no number to remember to update.
+const currentDay = Math.max(0, ...(pieces as any[]).map((p) => Number(p.day) || 0));
 ---
 <Base>
+  <section class="artist-intro">
+    <h2 class="artist-name">{ARTIST} — <span>{ALIAS}</span></h2>
+    <p class="artist-bio">
+      Born in the age of analog. Raised by algorithms. Forever pushing the
+      boundary between man and machine.
+    </p>
+  </section>
+
   <section class="hero">
-    <p class="kicker">One finished work every day of 2026</p>
-    <h1>Own the art.<br />Wear the proof.</h1>
+    <h1 class="day-line">
+      DAY {String(currentDay).padStart(4, '0')}<span class="arrow">→</span>
+      <span class="day-sub">present. One image every day.</span>
+    </h1>
+    <p class="manifesto">EVERYDAYS.<br />ONE IMAGE. EVERY DAY.<br />NO EXCEPTIONS.</p>
     <p class="sub">
-      Every piece can be minted as a full-resolution master, printed museum-grade,
-      or pressed onto a garment with a QR code that links back to your certificate
-      of ownership. Masters start at ${BASE} — and the price only goes up.
+      Every piece is signed, dated, and fingerprinted to me. Own the
+      full-resolution master, hang it as a museum-grade print, or wear it with a
+      QR code that proves it's yours. Masters start at ${BASE} — and the price
+      only goes up.
     </p>
     <div class="hero-cta">
       <a href="#gallery" class="button">See the collection</a>

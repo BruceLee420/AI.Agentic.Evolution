@@ -228,3 +228,15 @@ main { display: block; }
 .vault-item { display: block; padding: .5rem .7rem; background: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); font-size: .85rem; text-decoration: none; color: var(--paper); transition: border-color .15s; }
 .vault-item:hover { border-color: var(--accent); }
 .vault-empty { color: var(--dim); font-size: .85rem; margin: 0; font-style: italic; }
+
+/* ---------- artist intro (ported from the Wix site) ---------- */
+.artist-intro { max-width: 1100px; margin: 0 auto; padding: 3.5rem 1.5rem 0; }
+.artist-name { font-size: 1.35rem; font-weight: 700; margin: 0 0 .6rem; letter-spacing: .01em; }
+.artist-name span { color: var(--accent); }
+.artist-bio { color: var(--dim); max-width: 30rem; line-height: 1.6; margin: 0; font-size: .98rem; }
+
+/* ---------- day counter hero ---------- */
+.day-line { font-size: clamp(2.6rem, 8vw, 5rem); line-height: 1.02; letter-spacing: -.03em; margin: 0 0 1.5rem; font-weight: 800; }
+.day-line .arrow { color: var(--accent); margin-left: .1em; }
+.day-line .day-sub { display: block; font-weight: 400; letter-spacing: -.02em; }
+.manifesto { font-size: clamp(1rem, 2.2vw, 1.25rem); line-height: 1.45; letter-spacing: .04em; margin: 0 0 1.75rem; color: var(--paper); }
