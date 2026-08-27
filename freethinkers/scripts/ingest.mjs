@@ -66,6 +66,9 @@ const TRIM_THRESHOLD = Number(opt('--trim-threshold', 15)); // paper-margin tole
 // thumbnail size without competing with the artwork.
 const SIG_WIDTH = Number(opt('--signature-width', 0.22));
 const SIG_MARGIN = Number(opt('--signature-margin', 24));
+// Take a first bite instead of the whole folder. Rerunning without --limit
+// picks up where you stopped, so a 5-file test costs you nothing.
+const LIMIT = Number(opt('--limit', Infinity));
 const INK_RGB = [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0);
 
 if (!dropDir) {
@@ -270,9 +273,16 @@ await mkdir(join(OUT, 'masters'), { recursive: true });
 
 const catalog = await loadCatalog();
 const seen = new Set(catalog.map((r) => r.filename));
+// The signature lives alongside the art — never treat it as a piece.
+const SIG_NAME = SIGNATURE ? basename(SIGNATURE).toLowerCase() : '';
 const files = (await readdir(dropDir))
   .filter((f) => /\.(png|jpe?g|tiff?|webp)$/i.test(f))
-  .sort();
+  .filter((f) => {
+    const n = f.toLowerCase();
+    return n !== SIG_NAME && !n.includes('signature');
+  })
+  .sort()
+  .slice(0, LIMIT);
 
 console.log(`Drop folder: ${files.length} images · catalog: ${catalog.length} existing\n`);
 

@@ -46,7 +46,7 @@ DROP="/path/to/Art.Folder/1-Drop"
 SIG="/path/to/Art.Folder/1-Drop/Signature.png"
 
 # 1. Ingest — titles, dates, signature, fingerprint, masters, catalog
-node ingest.mjs "$DROP" --signature "$SIG" --artist "Adrian A. Grimaldo" --year 2026
+node ingest.mjs "$DROP" --signature "$SIG" --artist "Adrian A. Grimaldo" --limit 5
 
 # 2. Score — visual-impact ranking as a starting order
 node score.mjs
