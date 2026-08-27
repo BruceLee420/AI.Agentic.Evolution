@@ -1,20 +1,20 @@
 [
   {
-    "id": "FT-2026-001",
-    "title": "AI AGENTS",
+    "id": "FT-2026-002",
+    "title": "WHITE PIECE",
     "story": "",
-    "date": "2026-04-11",
-    "day": 101,
+    "date": "2026-05-01",
+    "day": 121,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []
   },
   {
-    "id": "FT-2026-002",
-    "title": "BISON",
+    "id": "FT-2026-001",
+    "title": "DARK PIECE",
     "story": "",
-    "date": "2026-04-22",
-    "day": 112,
+    "date": "2026-05-02",
+    "day": 122,
     "ratio": "1 / 1",
     "editionSize": 120,
     "tags": []

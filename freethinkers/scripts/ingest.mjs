@@ -60,7 +60,10 @@ const FORCE = flag('--force');
 const KEEP_BG = flag('--signature-keep-bg');       // already a clean transparent PNG
 const PAPER_LEVEL = Number(opt('--paper-level', 210)); // luma at/above this = paper
 const INK_FLOOR = Number(opt('--ink-floor', 90));      // luma at/below this = solid ink
-const INK_HEX = opt('--signature-color', '#ffffff');
+// 'auto' (default) reads the corner of each piece and picks the tone that
+// reads there. Pass a hex value to force one colour across the whole run.
+const INK_HEX = opt('--signature-color', 'auto');
+const INK_MODE = INK_HEX.toLowerCase() === 'auto' ? 'auto' : 'fixed';
 const TRIM_THRESHOLD = Number(opt('--trim-threshold', 15)); // paper-margin tolerance
 // Signature width as a share of the image width. 0.22 reads clearly at gallery
 // thumbnail size without competing with the artwork.
@@ -69,7 +72,9 @@ const SIG_MARGIN = Number(opt('--signature-margin', 24));
 // Take a first bite instead of the whole folder. Rerunning without --limit
 // picks up where you stopped, so a 5-file test costs you nothing.
 const LIMIT = Number(opt('--limit', Infinity));
-const INK_RGB = [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0);
+const INK_RGB = INK_MODE === 'fixed'
+  ? [1, 3, 5].map((i) => parseInt(INK_HEX.slice(i, i + 2), 16) || 0)
+  : [255, 255, 255];
 
 if (!dropDir) {
   console.error('usage: node ingest.mjs <dropFolder> [--signature sig.png] [--artist "Name"]');
@@ -149,28 +154,33 @@ async function stamp(buf, payload) {
 
 const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
-/** Text signature + date, bottom-right, with a soft shadow so it reads on any art. */
-const signatureSVG = (w, h, dateLabel) => Buffer.from(`
+/** Text signature + date, bottom-right, haloed so it reads on any art. */
+const signatureSVG = (w, h, dateLabel, ink = '#ffffff', halo = '#000000') => Buffer.from(`
   <svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <filter id="s" x="-50%" y="-50%" width="200%" height="200%">
-        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.65"/>
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="${halo}" flood-opacity="0.8"/>
       </filter>
     </defs>
     <text x="${w - 24}" y="${h - 42}" text-anchor="end" filter="url(#s)"
           font-family="Georgia, 'Times New Roman', serif" font-style="italic"
-          font-size="${Math.max(20, Math.round(w / 32))}" fill="#ffffff" opacity="0.92">${esc(ARTIST)}</text>
+          font-size="${Math.max(20, Math.round(w / 32))}" fill="${ink}" opacity="0.95">${esc(ARTIST)}</text>
     <text x="${w - 24}" y="${h - 18}" text-anchor="end" filter="url(#s)"
           font-family="sans-serif" font-size="${Math.max(12, Math.round(w / 68))}"
-          fill="#ffffff" opacity="0.7" letter-spacing="1.5">${esc(dateLabel)}</text>
+          fill="${ink}" opacity="0.8" letter-spacing="1.5">${esc(dateLabel)}</text>
   </svg>`);
 
 /** Date caption that sits under an image signature. */
-const dateSVG = (w, h, dateLabel) => Buffer.from(`
+const dateSVG = (w, h, dateLabel, ink = '#ffffff', halo = '#000000') => Buffer.from(`
   <svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
-    <text x="${w - 24}" y="${h - 18}" text-anchor="end"
+    <defs>
+      <filter id="d" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="${halo}" flood-opacity="0.8"/>
+      </filter>
+    </defs>
+    <text x="${w - 24}" y="${h - 18}" text-anchor="end" filter="url(#d)"
           font-family="sans-serif" font-size="${Math.max(12, Math.round(w / 68))}"
-          fill="#ffffff" opacity="0.75" letter-spacing="1.5">${esc(dateLabel)}</text>
+          fill="${ink}" opacity="0.85" letter-spacing="1.5">${esc(dateLabel)}</text>
   </svg>`);
 
 /**
@@ -186,7 +196,36 @@ const dateSVG = (w, h, dateLabel) => Buffer.from(`
  * Pass --signature-keep-bg if you already have a clean transparent PNG and want
  * it composited exactly as-is.
  */
-async function prepareSignature(w) {
+const LUMA = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+/**
+ * Picks ink colour from the artwork itself.
+ *
+ * A single fixed colour can't work across a whole catalogue: white vanishes on
+ * pale pieces, black vanishes on dark ones. This samples the corner the
+ * signature actually lands in and returns whichever reads better there, so
+ * every piece gets a legible mark without you sorting them by hand.
+ */
+async function pickInk(previewBuf, w, h) {
+  if (INK_MODE !== 'auto') return { ink: INK_RGB, halo: INK_RGB[0] > 127 ? [0, 0, 0] : [255, 255, 255] };
+
+  const boxW = Math.max(1, Math.round(w * 0.38));
+  const boxH = Math.max(1, Math.round(h * 0.20));
+  const region = await sharp(previewBuf)
+    .extract({ left: w - boxW, top: h - boxH, width: boxW, height: boxH })
+    .stats();
+  const [r, g, b] = region.channels.slice(0, 3).map((c) => c.mean);
+  const lum = LUMA(r, g, b);
+
+  // Threshold sits above mid-grey: white ink with a dark halo holds up on
+  // mid-tones better than black ink does, so only commit to black when the
+  // corner is genuinely pale.
+  return lum > 150
+    ? { ink: [17, 17, 20], halo: [255, 255, 255] }   // dark ink on light art
+    : { ink: [255, 255, 255], halo: [0, 0, 0] };     // light ink on dark art
+}
+
+async function prepareSignature(w, inkRGB) {
   const sigW = Math.round(w * SIG_WIDTH);
   // Trim the paper margin first, so the ink itself is what gets scaled and
   // placed. Without this, a signature photographed with lots of empty paper
@@ -201,16 +240,19 @@ async function prepareSignature(w) {
 
   const { data, info } = await resized.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const ch = info.channels;
-  const [cr, cg, cb] = INK_RGB;
+  const [cr, cg, cb] = inkRGB;
 
   for (let i = 0; i < data.length; i += ch) {
-    // Rec. 601 luma — good enough for separating ink from paper.
-    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const lum = LUMA(data[i], data[i + 1], data[i + 2]);
     // Fully opaque at/below INK_FLOOR, fully clear at/above PAPER_LEVEL.
     let alpha = ((PAPER_LEVEL - lum) / (PAPER_LEVEL - INK_FLOOR)) * 255;
     alpha = Math.max(0, Math.min(255, alpha));
+    // Respect transparency the source already has. A PNG exported with a
+    // transparent background often stores black in those pixels, which the
+    // luminance test alone would read as solid ink.
+    const existing = ch === 4 ? data[i + 3] : 255;
     data[i] = cr; data[i + 1] = cg; data[i + 2] = cb;
-    if (ch === 4) data[i + 3] = Math.round(alpha);
+    if (ch === 4) data[i + 3] = Math.round((alpha * existing) / 255);
   }
 
   return sharp(data, { raw: { width: info.width, height: info.height, channels: ch } })
@@ -219,21 +261,33 @@ async function prepareSignature(w) {
 
 async function signPreview(previewBuf, dateLabel) {
   const { width: w, height: h } = await sharp(previewBuf).metadata();
+  const { ink, halo } = await pickInk(previewBuf, w, h);
+  const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
   const layers = [];
 
   const hasSig = SIGNATURE && (await access(SIGNATURE).then(() => true).catch(() => false));
   if (hasSig) {
-    const sig = await prepareSignature(w);
-    const sigH = (await sharp(sig).metadata()).height;
-    // Soft shadow behind the mark so it survives light passages in the art.
-    const shadow = await sharp(sig).blur(3).toBuffer();
-    const left = w - (await sharp(sig).metadata()).width - SIG_MARGIN;
-    const top = h - sigH - SIG_MARGIN - 16;   // leaves room for the date line
-    layers.push({ input: shadow, left, top: top + 2 });
+    const sig = await prepareSignature(w, ink);
+    const meta = await sharp(sig).metadata();
+    const left = w - meta.width - SIG_MARGIN;
+    const top = h - meta.height - SIG_MARGIN - 16;  // leaves room for the date line
+
+    // A halo in the opposite tone, spread slightly, so the mark separates from
+    // whatever it lands on instead of relying on the artwork being cooperative.
+    const glow = await sharp(sig)
+      .composite([{
+        input: Buffer.from(`<svg width="${meta.width}" height="${meta.height}">
+          <rect width="100%" height="100%" fill="${hex(halo)}"/></svg>`),
+        blend: 'in',
+      }])
+      .blur(4).png().toBuffer();
+
+    layers.push({ input: glow, left, top: top + 1 });
+    layers.push({ input: glow, left, top: top + 1 });   // twice = denser halo
     layers.push({ input: sig, left, top });
-    layers.push({ input: dateSVG(w, h, dateLabel) });
+    layers.push({ input: dateSVG(w, h, dateLabel, hex(ink), hex(halo)) });
   } else {
-    layers.push({ input: signatureSVG(w, h, dateLabel) });
+    layers.push({ input: signatureSVG(w, h, dateLabel, hex(ink), hex(halo)) });
   }
   return sharp(previewBuf).composite(layers).png().toBuffer();
 }
