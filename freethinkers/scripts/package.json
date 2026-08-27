@@ -1,0 +1,11 @@
+{
+  "name": "freethinkers-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "sharp": "^0.34.0",
+    "qrcode": "^1.5.4",
+    "dotenv": "^16.4.0"
+  }
+}

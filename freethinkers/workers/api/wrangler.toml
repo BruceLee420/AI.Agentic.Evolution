@@ -1,0 +1,38 @@
+name = "freethinkers-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# Add the custom route once DNS is on Cloudflare. Until then the worker is
+# reachable at freethinkers-api.<your-subdomain>.workers.dev — point the sites'
+# PUBLIC_API_BASE at that and everything works.
+# routes = [{ pattern = "api.freethinkers.ai/*", zone_name = "freethinkers.ai" }]
+
+kv_namespaces = [
+  { binding = "PRICING", id = "REPLACE_AFTER_wrangler_kv_namespace_create_PRICING" },
+  { binding = "ENTITLEMENTS", id = "REPLACE_AFTER_wrangler_kv_namespace_create_ENTITLEMENTS" }
+]
+
+[[r2_buckets]]
+binding = "MASTERS"
+bucket_name = "ft-masters"
+
+[[r2_buckets]]
+binding = "PUBLIC_ART"
+bucket_name = "ft-public"
+
+[vars]
+SITE_ORIGIN = "https://freethinkers.ai"
+ALLOWED_ORIGINS = "https://freethinkers.ai,https://www.freethinkers.ai,https://ftwlabs.ai,https://www.ftwlabs.ai"
+BASE_PRICE = "300"
+TIER_SIZE = "12"
+TIER_INCREASE_PCT = "12"
+PRINT_PRICE = "80"
+PRESS_PRICE = "65"
+FREE_APPAREL_FROM_TIER = "1"
+DOWNLOAD_TTL_HOURS = "72"
+DOWNLOAD_MAX_USES = "3"
+
+# Secrets (wrangler secret put NAME):
+#   SIGNING_KEY      openssl rand -hex 32
+#   SNIPCART_SECRET  Snipcart secret API key
+#   PRINTFUL_KEY     Printful API key
