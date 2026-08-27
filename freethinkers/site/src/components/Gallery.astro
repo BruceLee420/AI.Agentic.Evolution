@@ -1,14 +1,27 @@
 ---
 /**
- * Gallery — filterable grid of finished works with a protected lightbox.
+ * Gallery — filterable grid of finished works, with optional motion.
  *
- * Art is drawn into <canvas> rather than <img> so the DOM carries no saveable
- * source (see docs/01-art-protection.md, Layer 2). Tiles show a deterministic
- * gradient until previews exist, so the gallery is presentable before upload.
+ * Motion is progressive: a piece shows its clip only if catalog.csv gives it
+ * one. Everything works with zero clips, and each clip you add lights up on its
+ * own. That matters when you have 180 pieces and clips for six of them.
+ *
+ * Behaviour:
+ *   · hover a tile with a clip → the clip fades in over the still and loops
+ *   · leave → it fades back to the still
+ *   · open a piece → still and motion sit side by side
+ *   · the Motion/Stills toggle is remembered per visitor, and motion is off
+ *     by default for anyone who asked their OS for reduced motion
+ *
+ * Stills are drawn to <canvas> so the DOM holds no saveable source. Clips are
+ * deliberately short, muted, low-res previews — treat them as marketing, the
+ * same way the 1080p still is.
  */
 import pieces from '../data/pieces.json';
 const API = import.meta.env.PUBLIC_API_BASE ?? 'https://api.freethinkers.ai';
-const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
+const CLIPS = import.meta.env.PUBLIC_CLIP_BASE ?? `${API}/clip`;
+const tags = [...new Set((pieces as any[]).flatMap((p) => p.tags ?? []))].sort();
+const hasAnyClip = (pieces as any[]).some((p) => p.clip);
 ---
 <section class="gallery-section" id="gallery">
   <div class="section-head">
@@ -20,17 +33,30 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
   </div>
 
   <div class="gallery" id="gallery-grid"></div>
+
+  {hasAnyClip && (
+    <div class="motion-toggle">
+      <button id="motion-btn" type="button" aria-pressed="false">
+        <span class="dot"></span><span id="motion-label">Motion off</span>
+      </button>
+      <span class="motion-hint">Hover a piece with a clip to see it move</span>
+    </div>
+  )}
 </section>
 
 <div class="lightbox" id="ft-lightbox" hidden>
   <button class="lb-close" id="ft-close" aria-label="Close">✕</button>
   <button class="lb-nav lb-prev" id="ft-prev" aria-label="Previous">‹</button>
   <figure class="lb-figure">
-    <canvas id="ft-canvas"></canvas>
+    <div class="lb-stage" id="lb-stage">
+      <canvas id="ft-canvas"></canvas>
+      <video id="ft-video" class="lb-video" muted loop playsinline preload="none" hidden></video>
+    </div>
     <figcaption>
       <div>
         <strong id="ft-title"></strong>
         <span id="ft-meta"></span>
+        <p class="lb-story" id="ft-story"></p>
       </div>
       <a class="button small" id="ft-link" href="#">Own this piece →</a>
     </figcaption>
@@ -39,25 +65,33 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
 </div>
 
 <script type="application/json" id="piece-data" set:html={JSON.stringify(pieces)} />
-<script define:vars={{ API }}>
+<script define:vars={{ API, CLIPS }}>
   const ALL = JSON.parse(document.getElementById('piece-data').textContent);
   const grid = document.getElementById('gallery-grid');
   let view = ALL.slice();
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let motion = !reduced && localStorage.getItem('ft-motion') === 'on';
 
   const hue = (id) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
   const placeholder = (id) =>
     `linear-gradient(${hue(id)}deg, hsl(${hue(id)} 45% 25%), hsl(${(hue(id) + 50) % 360} 40% 12%))`;
 
+  /* ---------- grid ---------- */
   function render() {
     grid.innerHTML = '';
     const frag = document.createDocumentFragment();
     view.forEach((p) => {
       const el = document.createElement('article');
-      el.className = 'g-tile';
+      el.className = 'g-tile' + (p.clip ? ' has-clip' : '');
       el.dataset.id = p.id;
+      if (p.clip) el.dataset.clip = `${CLIPS}/${p.clip}`;
       el.style.setProperty('--ratio', p.ratio ?? '1 / 1');
       el.innerHTML = `
-        <div class="g-art" style="background:${placeholder(p.id)}" data-src="${API}/img/${p.id}"></div>
+        <div class="g-frame">
+          <div class="g-art" style="background:${placeholder(p.id)}" data-src="${API}/img/${p.id}"></div>
+          ${p.clip ? '<span class="g-badge" title="This piece has a motion version">▶</span>' : ''}
+        </div>
         <div class="g-info">
           <h3>${p.title}</h3>
           <span class="g-day">Day ${p.day ?? '—'} · ${p.date ?? ''}</span>
@@ -79,6 +113,55 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
   }, { rootMargin: '300px' });
   const lazy = () => grid.querySelectorAll('.g-art:not(.loaded)').forEach((d) => io.observe(d));
 
+  /* ---------- hover motion ----------
+     The <video> is created on first hover and never preloaded, so a gallery of
+     180 pieces costs nothing until someone actually reaches for a clip. */
+  function attachClip(tile) {
+    if (!motion || !tile.dataset.clip || tile.querySelector('video')) return;
+    const v = document.createElement('video');
+    v.className = 'g-video';
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto';
+    v.src = tile.dataset.clip;
+    v.addEventListener('canplay', () => tile.classList.add('clip-ready'));
+    tile.querySelector('.g-frame').appendChild(v);
+  }
+
+  grid.addEventListener('pointerenter', (e) => {
+    const t = e.target.closest?.('.g-tile.has-clip');
+    if (!t || !motion) return;
+    attachClip(t);
+    t.querySelector('video')?.play?.().catch(() => {});
+  }, true);
+
+  grid.addEventListener('pointerleave', (e) => {
+    const t = e.target.closest?.('.g-tile.has-clip');
+    if (!t) return;
+    const v = t.querySelector('video');
+    if (v) { v.pause(); v.currentTime = 0; }
+    t.classList.remove('clip-ready');
+  }, true);
+
+  /* ---------- motion toggle ---------- */
+  const btn = document.getElementById('motion-btn');
+  function syncMotion() {
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(motion));
+    btn.classList.toggle('on', motion);
+    document.getElementById('motion-label').textContent = motion ? 'Motion on' : 'Motion off';
+    document.body.classList.toggle('motion-on', motion);
+    if (!motion) {
+      grid.querySelectorAll('.g-tile video').forEach((v) => { v.pause(); v.remove(); });
+      grid.querySelectorAll('.g-tile').forEach((t) => t.classList.remove('clip-ready'));
+    }
+  }
+  btn?.addEventListener('click', () => {
+    motion = !motion;
+    localStorage.setItem('ft-motion', motion ? 'on' : 'off');
+    syncMotion();
+    paintIfOpen();
+  });
+
+  /* ---------- filters ---------- */
   document.querySelector('.gallery-controls').addEventListener('click', (e) => {
     const c = e.target.closest('.chip');
     if (!c) return;
@@ -88,16 +171,30 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
     render();
   });
 
-  /* ---- lightbox ---- */
+  /* ---------- lightbox: still and motion side by side ---------- */
   const lb = document.getElementById('ft-lightbox');
   const canvas = document.getElementById('ft-canvas');
+  const video = document.getElementById('ft-video');
+  const stage = document.getElementById('lb-stage');
   let idx = -1;
 
   function paint() {
     const p = view[idx]; if (!p) return;
     document.getElementById('ft-title').textContent = p.title;
     document.getElementById('ft-meta').textContent = ` · ${p.id} · Day ${p.day ?? '—'}`;
+    document.getElementById('ft-story').textContent = p.story ?? '';
     document.getElementById('ft-link').href = `/art/${p.id}`;
+
+    const showClip = Boolean(p.clip) && motion;
+    stage.classList.toggle('paired', showClip);
+    video.hidden = !showClip;
+    if (showClip) {
+      video.src = `${CLIPS}/${p.clip}`;
+      video.play().catch(() => {});
+    } else {
+      video.pause(); video.removeAttribute('src'); video.load();
+    }
+
     const ctx = canvas.getContext('2d');
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -113,8 +210,13 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
     };
     img.src = `${API}/img/${p.id}`;
   }
+  const paintIfOpen = () => { if (!lb.hidden) paint(); };
+
   const open = (id) => { idx = view.findIndex((p) => p.id === id); paint(); lb.hidden = false; document.body.style.overflow = 'hidden'; };
-  const close = () => { lb.hidden = true; document.body.style.overflow = ''; };
+  const close = () => {
+    lb.hidden = true; document.body.style.overflow = '';
+    video.pause(); video.removeAttribute('src'); video.load();
+  };
   const step = (d) => { idx = (idx + d + view.length) % view.length; paint(); };
 
   grid.addEventListener('click', (e) => {
@@ -131,7 +233,8 @@ const tags = [...new Set(pieces.flatMap((p: any) => p.tags ?? []))].sort();
     if (e.key === 'ArrowRight') step(1);
   });
   for (const ev of ['contextmenu', 'dragstart'])
-    document.addEventListener(ev, (e) => { if (e.target.closest('.g-art, .lb-figure')) e.preventDefault(); });
+    document.addEventListener(ev, (e) => { if (e.target.closest('.g-art, .lb-figure, .g-video')) e.preventDefault(); });
 
   render();
+  syncMotion();
 </script>

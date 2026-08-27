@@ -69,7 +69,16 @@ if (!dropDir) {
 
 /* ---------------- tiny CSV (no dependency, handles quoted commas) ---------------- */
 
-const COLUMNS = ['id', 'filename', 'title', 'date', 'day', 'description', 'tags', 'ratio', 'processed'];
+/**
+ * order  — your manual sequence. Blank means "use the auto score". Anything you
+ *          set here always wins; nothing overwrites it. This is the column the
+ *          curator page writes when you drag pieces around.
+ * score  — auto visual-impact score from score.mjs (0-100). A starting point
+ *          for ordering, never a verdict on the work.
+ * clip   — optional video filename for the motion version of the piece.
+ */
+const COLUMNS = ['id', 'filename', 'title', 'date', 'day', 'description', 'tags',
+  'ratio', 'order', 'score', 'clip', 'processed'];
 
 function parseCSV(text) {
   const rows = [];
@@ -272,6 +281,9 @@ for (const f of files) {
     ratio: meta.width && meta.height
       ? (Math.abs(meta.width / meta.height - 1) < 0.02 ? '1 / 1' : `${meta.width} / ${meta.height}`)
       : '1 / 1',
+    order: '',
+    score: '',
+    clip: '',
     processed: '',
   });
   console.log(`+ catalogued ${f} → FT-${YEAR}-${String(nextNum).padStart(3, '0')}`);
@@ -314,7 +326,18 @@ for (const rec of catalog) {
 await saveCatalog(catalog);
 
 // 3) Rebuild the site catalog.
-const pieces = catalog.map((r) => ({
+// Display order: your manual `order` first (lowest number = first), then
+// anything unordered by score, then by day. Your hand always beats the machine.
+const ranked = [...catalog].sort((a, b) => {
+  const ao = a.order === '' ? Infinity : Number(a.order);
+  const bo = b.order === '' ? Infinity : Number(b.order);
+  if (ao !== bo) return ao - bo;
+  const as = Number(a.score) || 0, bs = Number(b.score) || 0;
+  if (as !== bs) return bs - as;
+  return (Number(a.day) || 0) - (Number(b.day) || 0);
+});
+
+const pieces = ranked.map((r) => ({
   id: r.id,
   title: r.title,
   story: r.description || '',
@@ -323,6 +346,8 @@ const pieces = catalog.map((r) => ({
   ratio: r.ratio || '1 / 1',
   editionSize: 120,
   tags: r.tags ? r.tags.split(/[;|]/).map((t) => t.trim()).filter(Boolean) : [],
+  ...(r.clip ? { clip: r.clip } : {}),
+  ...(r.score ? { score: Number(r.score) } : {}),
 }));
 await writeFile(
   new URL('../site/src/data/pieces.json', import.meta.url),

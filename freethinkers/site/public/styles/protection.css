@@ -240,3 +240,48 @@ main { display: block; }
 .day-line .arrow { color: var(--accent); margin-left: .1em; }
 .day-line .day-sub { display: block; font-weight: 400; letter-spacing: -.02em; }
 .manifesto { font-size: clamp(1rem, 2.2vw, 1.25rem); line-height: 1.45; letter-spacing: .04em; margin: 0 0 1.75rem; color: var(--paper); }
+
+/* ---------- motion / clips ---------- */
+.g-frame { position: relative; overflow: hidden; border-radius: var(--radius); }
+.g-video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity .45s ease; pointer-events: none;
+  user-select: none; -webkit-user-select: none;
+}
+.g-tile.clip-ready .g-video { opacity: 1; }
+.g-badge {
+  position: absolute; top: .5rem; right: .5rem; z-index: 2;
+  display: grid; place-items: center; width: 22px; height: 22px;
+  background: rgba(13,13,15,.75); border: 1px solid var(--line); border-radius: 50%;
+  font-size: .6rem; color: var(--paper); backdrop-filter: blur(4px);
+}
+body.motion-on .g-badge { border-color: var(--accent); color: var(--accent); }
+
+.motion-toggle { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; margin-top: 2rem; }
+#motion-btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  background: transparent; border: 1px solid var(--line); color: var(--dim);
+  border-radius: 999px; padding: .45rem 1rem; cursor: pointer; transition: all .15s;
+}
+#motion-btn:hover { color: var(--paper); }
+#motion-btn.on { border-color: var(--accent); color: var(--accent); }
+#motion-btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background .15s; }
+#motion-btn.on .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.motion-hint { color: var(--dim); font-size: .82rem; }
+
+/* Lightbox: still and motion side by side when a clip exists */
+.lb-stage { display: block; }
+.lb-stage.paired {
+  display: grid; gap: .75rem; grid-template-columns: 1fr;
+}
+@media (min-width: 760px) { .lb-stage.paired { grid-template-columns: 1fr 1fr; } }
+.lb-stage.paired canvas, .lb-stage.paired .lb-video { max-height: 62vh; width: 100%; }
+.lb-video {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); object-fit: contain; max-height: 78vh; max-width: 100%;
+}
+.lb-story { color: var(--dim); font-size: .85rem; margin: .4rem 0 0; max-width: 34rem; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-video { transition: none; }
+}
