@@ -87,15 +87,48 @@ main { display: block; }
 .chip:hover { color: var(--paper); }
 .chip.active { background: var(--paper); border-color: var(--paper); color: var(--ink); font-weight: 600; }
 
-.gallery { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.g-tile { cursor: pointer; }
-.g-art {
-  aspect-ratio: var(--ratio, 1 / 1); border-radius: var(--radius); background-size: cover;
-  background-position: center; border: 1px solid var(--line); transition: transform .2s, border-color .2s;
+.gallery {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
-.g-tile:hover .g-art { transform: translateY(-3px); border-color: var(--dim); }
-.g-info h3 { margin: .7rem 0 .15rem; font-size: 1rem; font-weight: 600; }
-.g-day { color: var(--dim); font-size: .8rem; }
+/* Uniform square cells with a hairline gap, so 180 pieces read as one
+   continuous mosaic instead of a ragged wall. Source aspect ratios still vary;
+   the tile crops to fill and the full frame is shown on the piece page. */
+.g-tile {
+  position: relative; aspect-ratio: 1; overflow: hidden; cursor: pointer;
+  background: var(--panel);
+}
+.g-frame { position: absolute; inset: 0; }
+.g-art {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  transition: transform .35s ease, filter .35s ease;
+}
+.g-tile:hover .g-art { transform: scale(1.06); filter: brightness(.55); }
+
+/* Titles sit over the art and only appear on hover, keeping the grid pure art */
+.g-info {
+  position: absolute; inset: auto 0 0 0; z-index: 2;
+  padding: .7rem .8rem;
+  background: linear-gradient(transparent, rgba(0,0,0,.8));
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.g-tile:hover .g-info { opacity: 1; transform: translateY(0); }
+.g-info h3 { margin: 0 0 .1rem; font-size: .92rem; font-weight: 600; line-height: 1.2; }
+.g-day { color: var(--dim); font-size: .72rem; }
+
+.gallery-empty {
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  padding: 2.5rem 1.5rem; text-align: center; color: var(--dim); margin-bottom: 1.5rem;
+}
+.gallery-empty strong { color: var(--accent); font-size: 1.05rem; }
+.gallery-empty code {
+  display: inline-block; margin: .9rem 0; padding: .6rem .9rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  color: var(--paper); font-size: .82rem; max-width: 100%; overflow-x: auto;
+}
+.gallery-empty .fine { font-size: .82rem; opacity: .75; }
 
 /* ---------- lightbox ---------- */
 .lightbox {

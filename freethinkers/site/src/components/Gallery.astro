@@ -36,6 +36,15 @@ const hasAnyClip = (pieces as any[]).some((p) => p.clip);
     </div>
   </div>
 
+  {pieces.length === 0 && (
+    <div class="gallery-empty">
+      <p><strong>No art loaded yet.</strong></p>
+      <p>Run the pipeline to publish your pieces here:</p>
+      <code>node ingest.mjs "$DROP" --signature "$SIG" --artist "Adrian A. Grimaldo"</code>
+      <p class="fine">Then restart the dev server. This message disappears once pieces.json has your work in it.</p>
+    </div>
+  )}
+
   <div class="gallery" id="gallery-grid"></div>
 
   {hasAnyClip && (
@@ -86,19 +95,22 @@ const hasAnyClip = (pieces as any[]).some((p) => p.clip);
     grid.innerHTML = '';
     const frag = document.createDocumentFragment();
     view.forEach((p) => {
+      // Every tile is the same square regardless of the source aspect ratio.
+      // Mixed ratios made the grid ragged; uniform cells let the collection
+      // read as one continuous work — which is the whole 365 idea. Full aspect
+      // is preserved on the piece page and in the lightbox.
       const el = document.createElement('article');
       el.className = 'g-tile' + (p.clip ? ' has-clip' : '');
       el.dataset.id = p.id;
       if (p.clip) el.dataset.clip = `${CLIPS}/${p.clip}`;
-      el.style.setProperty('--ratio', p.ratio ?? '1 / 1');
       el.innerHTML = `
         <div class="g-frame">
           <div class="g-art" style="background:${placeholder(p.id)}" data-src="${IMG}/${p.id}.png"></div>
           ${p.clip ? '<span class="g-badge" title="This piece has a motion version">▶</span>' : ''}
-        </div>
-        <div class="g-info">
-          <h3>${p.title}</h3>
-          <span class="g-day">Day ${p.day ?? '—'} · ${p.date ?? ''}</span>
+          <div class="g-info">
+            <h3>${p.title}</h3>
+            <span class="g-day">Day ${p.day ?? '—'} · ${p.date ?? ''}</span>
+          </div>
         </div>`;
       frag.appendChild(el);
     });
