@@ -94,8 +94,16 @@ if (!dropDir) {
  *          for ordering, never a verdict on the work.
  * clip   — optional video filename for the motion version of the piece.
  */
+/**
+ * kind — what this actually is, because they don't sell the same way:
+ *   daily     a finished daily piece (the default; digital master + POD)
+ *   comic     a multi-panel work or short; previewed, sold as a set
+ *   physical  a painting or sculpture — one of one, no reprints, real shipping
+ *   study     a concept or experiment (belongs on FTWlabs, not the ladder)
+ * Blank means daily. Set it in catalog.csv; the site can filter on it.
+ */
 const COLUMNS = ['id', 'filename', 'title', 'date', 'day', 'description', 'tags',
-  'ratio', 'order', 'score', 'clip', 'review', 'dupe', 'processed'];
+  'ratio', 'kind', 'order', 'score', 'clip', 'review', 'dupe', 'processed'];
 
 function parseCSV(text) {
   const rows = [];
@@ -421,6 +429,7 @@ for (const f of files) {
     ratio: meta.width && meta.height
       ? (Math.abs(meta.width / meta.height - 1) < 0.02 ? '1 / 1' : `${meta.width} / ${meta.height}`)
       : '1 / 1',
+    kind: '',
     order: '',
     score: '',
     clip: '',
@@ -534,6 +543,7 @@ const pieces = ranked.map((r) => ({
   ratio: r.ratio || '1 / 1',
   editionSize: 120,
   tags: r.tags ? r.tags.split(/[;|]/).map((t) => t.trim()).filter(Boolean) : [],
+  kind: r.kind || 'daily',
   ...(r.clip ? { clip: r.clip } : {}),
   ...(r.score ? { score: Number(r.score) } : {}),
 }));
