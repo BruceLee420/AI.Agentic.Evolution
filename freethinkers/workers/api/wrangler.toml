@@ -31,6 +31,7 @@ PRESS_PRICE = "65"
 FREE_APPAREL_FROM_TIER = "1"
 DOWNLOAD_TTL_HOURS = "72"
 DOWNLOAD_MAX_USES = "3"
+REF_COMMISSION_PCT = "10"
 
 # Secrets (wrangler secret put NAME):
 #   SIGNING_KEY      openssl rand -hex 32

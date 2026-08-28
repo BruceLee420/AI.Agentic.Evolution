@@ -9,6 +9,8 @@
  *   POST /api/webhooks/snipcart    order.completed → sold count, entitlement,
  *                                   download email, Printful order
  *   GET  /api/download             HMAC-signed, expiring, use-limited master delivery
+ *   GET  /api/scan                 QR scan → attribution cookie for the wearer
+ *   GET  /api/ref/:code            What a collector has earned from their garment
  */
 
 export interface Env {
@@ -26,6 +28,7 @@ export interface Env {
   FREE_APPAREL_FROM_TIER: string;
   DOWNLOAD_TTL_HOURS: string;
   DOWNLOAD_MAX_USES: string;
+  REF_COMMISSION_PCT: string;
   SIGNING_KEY: string;
   SNIPCART_SECRET: string;
   PRINTFUL_KEY: string;
@@ -171,6 +174,58 @@ async function reserve(req: Request, env: Env): Promise<Response> {
   return json({ ok: true, ref }, 200, h);
 }
 
+/* ---------------- the scan economy ----------------
+ * Each garment's QR carries the piece id and the owner's short code. A scan is
+ * logged and the code is handed back so the site can hold it in a cookie; if
+ * that visitor later buys, the sale is attributed to the owner who was wearing
+ * the piece. Collectors become an attributed, paid sales force rather than
+ * decoration — see docs/05-what-makes-it-unique.md.
+ *
+ * Attribution windows are deliberately generous (30 days): someone photographs
+ * a sweatshirt on Tuesday and buys the following weekend.
+ */
+
+const ATTRIBUTION_DAYS = 30;
+
+async function recordScan(req: Request, env: Env): Promise<Response> {
+  const h = cors(env, req.headers.get('origin'));
+  const url = new URL(req.url);
+  const piece = (url.searchParams.get('piece') ?? '').replace(/[^\w-]/g, '');
+  const ref = (url.searchParams.get('ref') ?? '').replace(/[^\w-]/g, '').slice(0, 24);
+  if (!piece) return json({ error: 'piece required' }, 400, h);
+
+  const day = new Date().toISOString().slice(0, 10);
+  // Counters are per piece and per referrer per day, so you can see which
+  // garments are actually being scanned and which owners are working.
+  const bump = async (key: string) => {
+    const n = Number((await env.PRICING.get(key)) ?? 0) + 1;
+    await env.PRICING.put(key, String(n));
+    return n;
+  };
+  const total = await bump(`SCAN:${piece}`);
+  if (ref) await bump(`SCAN:REF:${ref}:${day}`);
+
+  console.log(JSON.stringify({ evt: 'scan', piece, ref: ref || null, total }));
+  return json({ ok: true, piece, ref: ref || null, attributionDays: ATTRIBUTION_DAYS }, 200, {
+    ...h,
+    // Cookie is what carries attribution to checkout.
+    ...(ref
+      ? { 'set-cookie': `ft_ref=${ref}; Max-Age=${ATTRIBUTION_DAYS * 86400}; Path=/; SameSite=Lax; Secure` }
+      : {}),
+  });
+}
+
+/** What an owner has earned. Read by the Vault and the owner's own page. */
+async function refStats(req: Request, env: Env): Promise<Response> {
+  const h = cors(env, req.headers.get('origin'));
+  const ref = (new URL(req.url).pathname.split('/').pop() ?? '').replace(/[^\w-]/g, '');
+  if (!ref) return json({ error: 'ref required' }, 400, h);
+
+  const credited = Number((await env.ENTITLEMENTS.get(`REFSALES:${ref}`)) ?? 0);
+  const earned = Number((await env.ENTITLEMENTS.get(`REFEARNED:${ref}`)) ?? 0);
+  return json({ ref, sales: credited, earned }, 200, h);
+}
+
 /* ---------------- Collector's Vault ---------------- */
 
 const VAULT_TTL_HOURS = 72;
@@ -289,6 +344,18 @@ async function snipcartWebhook(req: Request, env: Env, ctx: ExecutionContext): P
     await env.ENTITLEMENTS.put(`COUNT:${email}`, String(lifetime));
     if (lifetime >= 12) await env.ENTITLEMENTS.put(`VAULT:${email}`, '1');
 
+    // Credit the collector whose garment led here, if any. Snipcart passes
+    // custom fields through on the order; the site puts ft_ref there at checkout.
+    const ref = String(order.customFields?.find?.((f: any) => f.name === 'ref')?.value ?? '').replace(/[^\w-]/g, '');
+    if (ref) {
+      const commission = Math.round(item.totalPrice * Number(env.REF_COMMISSION_PCT ?? 10)) / 100;
+      await env.ENTITLEMENTS.put(`REFSALES:${ref}`,
+        String(Number((await env.ENTITLEMENTS.get(`REFSALES:${ref}`)) ?? 0) + 1));
+      await env.ENTITLEMENTS.put(`REFEARNED:${ref}`,
+        String(Number((await env.ENTITLEMENTS.get(`REFEARNED:${ref}`)) ?? 0) + commission));
+      console.log(JSON.stringify({ evt: 'ref_credit', ref, pieceId, commission }));
+    }
+
     if (ladder(env, before).tier >= Number(env.FREE_APPAREL_FROM_TIER))
       ctx.waitUntil(createPrintfulOrder(env, order, { id: `${pieceId}-press`, free: true }));
 
@@ -396,6 +463,8 @@ export default {
     if (pathname === '/api/reserve' && req.method === 'POST') return reserve(req, env);
     if (pathname === '/api/vault/request' && req.method === 'POST') return vaultRequest(req, env, ctx);
     if (pathname === '/api/vault/content') return vaultContent(req, env);
+    if (pathname === '/api/scan') return recordScan(req, env);
+    if (pathname.startsWith('/api/ref/')) return refStats(req, env);
     if (pathname === '/api/webhooks/snipcart' && req.method === 'POST') return snipcartWebhook(req, env, ctx);
     if (pathname === '/api/download') return download(req, env);
 
