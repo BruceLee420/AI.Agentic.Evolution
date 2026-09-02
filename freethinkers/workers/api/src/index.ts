@@ -2,81 +2,31 @@
  * freethinkers-api — one worker serving both freethinkers.ai and ftwlabs.ai.
  *
  *   GET  /img/:id                  Layer-2 image gate: watermarked previews only
- *   GET  /api/products/:id         Price ladder (the value Snipcart validates against)
+ *   GET  /api/products/:id         Pricing: ladder for masters, FULFILL mapping for print/press
  *   GET  /api/certificate/:id      Public ownership status for QR certificate pages
  *   POST /api/subscribe            Email capture (both sites)
  *   POST /api/reserve              Records a bundle selection before payment
- *   POST /api/webhooks/snipcart    order.completed → sold count, entitlement,
- *                                   download email, Printful order
+ *   POST /api/checkout             Stripe Checkout Session, server-priced
+ *   POST /api/webhooks/stripe      checkout.session.completed → processOrder
+ *   POST /api/webhooks/snipcart    order.completed → processOrder
  *   GET  /api/download             HMAC-signed, expiring, use-limited master delivery
  *   GET  /api/scan                 QR scan → attribution cookie for the wearer
  *   GET  /api/ref/:code            What a collector has earned from their garment
+ *   cron (every 30 min)            Drains the fulfillment retry queue
+ *
+ * Both payment rails normalize into one NormalizedOrder and flow through
+ * processOrder: masters mint (sold count, entitlement, download email, vault
+ * count, ref credit), physical items route to Printful/Printify via the
+ * FULFILL: mappings — see fulfillment.ts.
  */
 
-export interface Env {
-  PRICING: KVNamespace;
-  ENTITLEMENTS: KVNamespace;
-  MASTERS: R2Bucket;
-  PUBLIC_ART: R2Bucket;
-  SITE_ORIGIN: string;
-  ALLOWED_ORIGINS: string;
-  BASE_PRICE: string;
-  TIER_SIZE: string;
-  TIER_INCREASE_PCT: string;
-  PRINT_PRICE: string;
-  PRESS_PRICE: string;
-  FREE_APPAREL_FROM_TIER: string;
-  DOWNLOAD_TTL_HOURS: string;
-  DOWNLOAD_MAX_USES: string;
-  REF_COMMISSION_PCT: string;
-  SIGNING_KEY: string;
-  SNIPCART_SECRET: string;
-  PRINTFUL_KEY: string;
-}
+import { Env, cors, json, ladder, soldCount, hmac, isPhysicalItem } from './shared';
+import { NormalizedOrder, FulfillMapping, fulfillOrRetry, retrySweep } from './fulfillment';
+import { stripeCheckout, parseStripeWebhook } from './stripe';
 
-const cors = (env: Env, origin: string | null) => {
-  const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const ok = origin && allowed.some((a) => origin === a);
-  return {
-    'access-control-allow-origin': ok ? origin! : allowed[0] ?? '*',
-    'access-control-allow-headers': 'content-type',
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
-  };
-};
-
-const json = (data: unknown, status = 200, headers: HeadersInit = {}) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json', ...headers },
-  });
-
-/* ---------------- pricing ladder ---------------- */
-
-function ladder(env: Env, sold: number) {
-  const base = Number(env.BASE_PRICE);
-  const size = Number(env.TIER_SIZE);
-  const rate = 1 + Number(env.TIER_INCREASE_PCT) / 100;
-  const tier = Math.floor(sold / size);
-  return {
-    tier: tier + 1,
-    price: Math.round(base * rate ** tier * 100) / 100,
-    nextPrice: Math.round(base * rate ** (tier + 1) * 100) / 100,
-    remainingAtTier: size - (sold % size),
-  };
-}
-
-const soldCount = async (env: Env, id: string) =>
-  Number((await env.PRICING.get(`SOLD:${id}`)) ?? 0);
+export type { Env };
 
 /* ---------------- signed download tokens ---------------- */
-
-async function hmac(key: string, msg: string): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-  );
-  const sig = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 async function makeToken(env: Env, orderId: string, pieceId: string) {
   const exp = Date.now() + Number(env.DOWNLOAD_TTL_HOURS) * 3600_000;
@@ -117,17 +67,23 @@ async function serveImage(req: Request, env: Env, id: string): Promise<Response>
 
 async function productInfo(req: Request, env: Env, id: string): Promise<Response> {
   const h = cors(env, req.headers.get('origin'));
-  const m = id.match(/^(.*?)(-print|-press)?$/)!;
-  const [pieceId, variant] = [m[1], m[2] ?? ''];
 
-  if (variant === '-print')
-    return json([{ id, url: `${env.SITE_ORIGIN}/art/${pieceId}`, price: Number(env.PRINT_PRICE) }], 200, h);
-  if (variant === '-press')
-    return json([{ id, url: `${env.SITE_ORIGIN}/art/${pieceId}`, price: Number(env.PRESS_PRICE) }], 200, h);
+  // Syndicated print/press items: price straight from the FULFILL mapping,
+  // so the PDP and any cart validation read the same numbers the webhook
+  // will fulfill against.
+  if (isPhysicalItem(id)) {
+    const pieceId = id.replace(/-(print|press)(-\w+)?$/, '');
+    const url = `${env.SITE_ORIGIN}/art/${pieceId}`;
+    const map = (await env.PRICING.get(`FULFILL:${id}`, 'json')) as FulfillMapping | null;
+    if (map) return json([{ id, url, price: map.price, prices: map.prices ?? null }], 200, h);
+    if (id.endsWith('-print')) return json([{ id, url, price: Number(env.PRINT_PRICE) }], 200, h);
+    if (id.endsWith('-press')) return json([{ id, url, price: Number(env.PRESS_PRICE) }], 200, h);
+    return json({ error: 'not synced' }, 404, h);
+  }
 
-  const sold = await soldCount(env, pieceId);
+  const sold = await soldCount(env, id);
   const l = ladder(env, sold);
-  return json([{ id, url: `${env.SITE_ORIGIN}/art/${pieceId}`, sold, ...l }], 200, h);
+  return json([{ id, url: `${env.SITE_ORIGIN}/art/${id}`, sold, ...l }], 200, h);
 }
 
 async function certificate(req: Request, env: Env, id: string): Promise<Response> {
@@ -306,6 +262,63 @@ async function vaultContent(req: Request, env: Env): Promise<Response> {
   }, 200, h);
 }
 
+/* ---------------- order processing (both payment rails land here) ---------------- */
+
+/**
+ * The one place a paid order is acted on, whichever rail collected the money.
+ * Physical items route to their POD provider; masters mint: sold count up the
+ * ladder, ownership + download entitlement, vault count, garment-scan ref
+ * credit, free apparel from the configured tier.
+ */
+async function processOrder(env: Env, ctx: ExecutionContext, order: NormalizedOrder, origin: string): Promise<void> {
+  for (const item of order.items) {
+    if (isPhysicalItem(item.id)) {
+      ctx.waitUntil(fulfillOrRetry(env, order, item));
+      continue;
+    }
+
+    const pieceId = item.id;
+    const before = await soldCount(env, pieceId);
+    const sold = before + item.quantity;
+    await env.PRICING.put(`SOLD:${pieceId}`, String(sold));
+    await env.ENTITLEMENTS.put(
+      `OWNER:${pieceId}`,
+      JSON.stringify({ email: order.email, orderId: order.orderId, mintedAt: new Date().toISOString().slice(0, 10) })
+    );
+    await env.ENTITLEMENTS.put(
+      `DL:${order.orderId}:${pieceId}`,
+      JSON.stringify({ uses: 0, max: Number(env.DOWNLOAD_MAX_USES) }),
+      { expirationTtl: Number(env.DOWNLOAD_TTL_HOURS) * 3600 }
+    );
+
+    const lifetime = Number((await env.ENTITLEMENTS.get(`COUNT:${order.email}`)) ?? 0) + item.quantity;
+    await env.ENTITLEMENTS.put(`COUNT:${order.email}`, String(lifetime));
+    if (lifetime >= 12) await env.ENTITLEMENTS.put(`VAULT:${order.email}`, '1');
+
+    // Credit the collector whose garment led here, if any.
+    if (order.ref) {
+      const ref = order.ref;
+      const commission = Math.round(item.price * Number(env.REF_COMMISSION_PCT ?? 10)) / 100;
+      await env.ENTITLEMENTS.put(`REFSALES:${ref}`,
+        String(Number((await env.ENTITLEMENTS.get(`REFSALES:${ref}`)) ?? 0) + 1));
+      await env.ENTITLEMENTS.put(`REFEARNED:${ref}`,
+        String(Number((await env.ENTITLEMENTS.get(`REFEARNED:${ref}`)) ?? 0) + commission));
+      console.log(JSON.stringify({ evt: 'ref_credit', ref, pieceId, commission }));
+    }
+
+    // Free apparel with the buyer's QR from the configured tier up — the
+    // garment is the marketing engine, so it ships with the piece.
+    if (order.recipient && ladder(env, before).tier >= Number(env.FREE_APPAREL_FROM_TIER)) {
+      const apparelId = `${pieceId}-${env.FREE_APPAREL_ITEM ?? 'press-hoodie'}`;
+      ctx.waitUntil(fulfillOrRetry(env, order, { id: apparelId, quantity: 1, price: 0 }));
+    }
+
+    const dl = await makeToken(env, order.orderId, pieceId);
+    ctx.waitUntil(sendDownloadEmail(env, order.email, pieceId, dl, origin));
+    console.log(JSON.stringify({ evt: 'mint', pieceId, orderId: order.orderId, sold, lifetime }));
+  }
+}
+
 async function snipcartWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const token = req.headers.get('x-snipcart-requesttoken');
   if (!token) return json({ error: 'missing token' }, 401);
@@ -317,54 +330,42 @@ async function snipcartWebhook(req: Request, env: Env, ctx: ExecutionContext): P
   const event = (await req.json()) as any;
   if (event.eventName !== 'order.completed') return json({ ignored: event.eventName });
 
-  const order = event.content;
-  const { email, token: orderId } = order;
+  const o = event.content;
+  const custom = (name: string) =>
+    String(o.customFields?.find?.((f: any) => f.name === name)?.value ?? '');
+  const itemCustom = (item: any, name: string) =>
+    String(item.customFields?.find?.((f: any) => f.name === name)?.value ?? '') || undefined;
 
-  for (const item of order.items as any[]) {
-    if (/-print$|-press$/.test(item.id)) {
-      ctx.waitUntil(createPrintfulOrder(env, order, item));
-      continue;
-    }
+  const order: NormalizedOrder = {
+    orderId: o.token,
+    email: o.email,
+    ref: custom('ref').replace(/[^\w-]/g, '') || null,
+    recipient: {
+      name: o.shippingAddressName ?? o.billingAddressName,
+      address1: o.shippingAddressAddress1 ?? o.billingAddressAddress1,
+      city: o.shippingAddressCity ?? o.billingAddressCity,
+      state_code: o.shippingAddressProvince ?? o.billingAddressProvince,
+      country_code: o.shippingAddressCountry ?? o.billingAddressCountry,
+      zip: o.shippingAddressPostalCode ?? o.billingAddressPostalCode,
+      email: o.email,
+    },
+    items: (o.items as any[]).map((i) => ({
+      id: i.id,
+      quantity: i.quantity ?? 1,
+      price: Number(i.totalPrice ?? i.price ?? 0),
+      size: itemCustom(i, 'size'),
+      color: itemCustom(i, 'color'),
+    })),
+  };
 
-    const pieceId = item.id;
-    const before = await soldCount(env, pieceId);
-    const sold = before + item.quantity;
-    await env.PRICING.put(`SOLD:${pieceId}`, String(sold));
-    await env.ENTITLEMENTS.put(
-      `OWNER:${pieceId}`,
-      JSON.stringify({ email, orderId, mintedAt: new Date().toISOString().slice(0, 10) })
-    );
-    await env.ENTITLEMENTS.put(
-      `DL:${orderId}:${pieceId}`,
-      JSON.stringify({ uses: 0, max: Number(env.DOWNLOAD_MAX_USES) }),
-      { expirationTtl: Number(env.DOWNLOAD_TTL_HOURS) * 3600 }
-    );
-
-    const lifetime = Number((await env.ENTITLEMENTS.get(`COUNT:${email}`)) ?? 0) + item.quantity;
-    await env.ENTITLEMENTS.put(`COUNT:${email}`, String(lifetime));
-    if (lifetime >= 12) await env.ENTITLEMENTS.put(`VAULT:${email}`, '1');
-
-    // Credit the collector whose garment led here, if any. Snipcart passes
-    // custom fields through on the order; the site puts ft_ref there at checkout.
-    const ref = String(order.customFields?.find?.((f: any) => f.name === 'ref')?.value ?? '').replace(/[^\w-]/g, '');
-    if (ref) {
-      const commission = Math.round(item.totalPrice * Number(env.REF_COMMISSION_PCT ?? 10)) / 100;
-      await env.ENTITLEMENTS.put(`REFSALES:${ref}`,
-        String(Number((await env.ENTITLEMENTS.get(`REFSALES:${ref}`)) ?? 0) + 1));
-      await env.ENTITLEMENTS.put(`REFEARNED:${ref}`,
-        String(Number((await env.ENTITLEMENTS.get(`REFEARNED:${ref}`)) ?? 0) + commission));
-      console.log(JSON.stringify({ evt: 'ref_credit', ref, pieceId, commission }));
-    }
-
-    if (ladder(env, before).tier >= Number(env.FREE_APPAREL_FROM_TIER))
-      ctx.waitUntil(createPrintfulOrder(env, order, { id: `${pieceId}-press`, free: true }));
-
-    const dl = await makeToken(env, orderId, pieceId);
-    ctx.waitUntil(sendDownloadEmail(env, email, pieceId, dl, new URL(req.url).origin));
-    console.log(JSON.stringify({ evt: 'mint', pieceId, orderId, sold, lifetime }));
-  }
-
+  await processOrder(env, ctx, order, new URL(req.url).origin);
   return json({ ok: true });
+}
+
+async function stripeWebhook(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const { response, order } = await parseStripeWebhook(req, env);
+  if (order) await processOrder(env, ctx, order, new URL(req.url).origin);
+  return response;
 }
 
 async function sendDownloadEmail(env: Env, to: string, pieceId: string, token: string, origin: string) {
@@ -386,31 +387,6 @@ async function sendDownloadEmail(env: Env, to: string, pieceId: string, token: s
       }],
     }),
   }).catch((e) => console.log('email failed', String(e)));
-}
-
-async function createPrintfulOrder(env: Env, order: any, item: any) {
-  const map = (await env.PRICING.get(`PF:${item.id}`, 'json')) as
-    | { variant_id: number; print_file_url: string } | null;
-  if (!map) { console.log('no printful mapping for', item.id); return; }
-
-  const res = await fetch('https://api.printful.com/orders', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.PRINTFUL_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      recipient: {
-        name: order.shippingAddressName ?? order.billingAddressName,
-        address1: order.shippingAddressAddress1 ?? order.billingAddressAddress1,
-        city: order.shippingAddressCity ?? order.billingAddressCity,
-        state_code: order.shippingAddressProvince ?? order.billingAddressProvince,
-        country_code: order.shippingAddressCountry ?? order.billingAddressCountry,
-        zip: order.shippingAddressPostalCode ?? order.billingAddressPostalCode,
-        email: order.email,
-      },
-      items: [{ variant_id: map.variant_id, quantity: item.quantity ?? 1, files: [{ url: map.print_file_url }] }],
-      confirm: false, // you approve in the Printful dash until you trust it
-    }),
-  });
-  console.log('printful order', item.id, res.status, item.free ? '(free apparel)' : '');
 }
 
 async function download(req: Request, env: Env): Promise<Response> {
@@ -461,13 +437,20 @@ export default {
     if ((m = pathname.match(/^\/api\/certificate\/([\w-]+)$/))) return certificate(req, env, m[1]);
     if (pathname === '/api/subscribe' && req.method === 'POST') return subscribe(req, env);
     if (pathname === '/api/reserve' && req.method === 'POST') return reserve(req, env);
+    if (pathname === '/api/checkout' && req.method === 'POST') return stripeCheckout(req, env);
     if (pathname === '/api/vault/request' && req.method === 'POST') return vaultRequest(req, env, ctx);
     if (pathname === '/api/vault/content') return vaultContent(req, env);
     if (pathname === '/api/scan') return recordScan(req, env);
     if (pathname.startsWith('/api/ref/')) return refStats(req, env);
     if (pathname === '/api/webhooks/snipcart' && req.method === 'POST') return snipcartWebhook(req, env, ctx);
+    if (pathname === '/api/webhooks/stripe' && req.method === 'POST') return stripeWebhook(req, env, ctx);
     if (pathname === '/api/download') return download(req, env);
 
     return json({ service: 'freethinkers-api', ok: true }, 200, cors(env, req.headers.get('origin')));
+  },
+
+  /** Cron: retry parked fulfillments so a provider outage never loses an order. */
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(retrySweep(env));
   },
 };

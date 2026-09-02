@@ -7,6 +7,11 @@ compatibility_date = "2026-06-01"
 # PUBLIC_API_BASE at that and everything works.
 # routes = [{ pattern = "api.freethinkers.ai/*", zone_name = "freethinkers.ai" }]
 
+# Retries parked fulfillments (see fulfillment.ts) — a provider outage delays
+# an order instead of losing it.
+[triggers]
+crons = ["*/30 * * * *"]
+
 kv_namespaces = [
   { binding = "PRICING", id = "REPLACE_AFTER_wrangler_kv_namespace_create_PRICING" },
   { binding = "ENTITLEMENTS", id = "REPLACE_AFTER_wrangler_kv_namespace_create_ENTITLEMENTS" }
@@ -29,11 +34,19 @@ TIER_INCREASE_PCT = "12"
 PRINT_PRICE = "80"
 PRESS_PRICE = "65"
 FREE_APPAREL_FROM_TIER = "1"
+FREE_APPAREL_ITEM = "press-hoodie"        # itemId suffix ordered free with a mint
 DOWNLOAD_TTL_HOURS = "72"
 DOWNLOAD_MAX_USES = "3"
 REF_COMMISSION_PCT = "10"
+STRIPE_AUTOMATIC_TAX = "0"                # set "1" AFTER activating Stripe Tax in the dashboard
+STRIPE_SHIP_COUNTRIES = "US,CA,GB,AU,NZ,DE,FR,NL,SE,JP"
+PRINTIFY_SHOP_ID = ""                     # optional; auto-detected from the key if empty
 
 # Secrets (wrangler secret put NAME):
-#   SIGNING_KEY      openssl rand -hex 32
-#   SNIPCART_SECRET  Snipcart secret API key
-#   PRINTFUL_KEY     Printful API key
+#   SIGNING_KEY            openssl rand -hex 32
+#   SNIPCART_SECRET        Snipcart secret API key
+#   PRINTFUL_KEY           Printful API key
+#   PRINTIFY_KEY           Printify API key
+#   STRIPE_SECRET_KEY      Stripe secret key (sk_live_... / sk_test_...)
+#   STRIPE_WEBHOOK_SECRET  Stripe webhook signing secret (whsec_...) for
+#                          the /api/webhooks/stripe endpoint
