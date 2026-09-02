@@ -39,6 +39,8 @@ export const cors = (env: Env, origin: string | null) => {
     'access-control-allow-origin': ok ? origin! : allowed[0] ?? '*',
     'access-control-allow-headers': 'content-type',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
+    // Lets the site send the ft_ref attribution cookie to /api/checkout.
+    ...(ok ? { 'access-control-allow-credentials': 'true' } : {}),
   };
 };
 

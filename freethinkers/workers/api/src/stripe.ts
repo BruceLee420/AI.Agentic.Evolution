@@ -80,7 +80,9 @@ export async function stripeCheckout(req: Request, env: Env): Promise<Response> 
 
   const physical = priced.some((it) => isPhysicalItem(it.id));
   const cartKey = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
-  const ref = String(body.ref ?? '').replace(/[^\w-]/g, '').slice(0, 24);
+  // Attribution: explicit ref wins, else the ft_ref cookie a garment scan set.
+  const cookieRef = /(?:^|;\s*)ft_ref=([\w-]+)/.exec(req.headers.get('cookie') ?? '')?.[1] ?? '';
+  const ref = String(body.ref || cookieRef).replace(/[^\w-]/g, '').slice(0, 24);
   await env.ENTITLEMENTS.put(`STRIPEORD:${cartKey}`, JSON.stringify({ items: priced, ref: ref || null }),
     { expirationTtl: CART_TTL_DAYS * 86400 });
 

@@ -1,10 +1,11 @@
 /**
  * Checkout abstraction for Freethinkers.AI.
  *
- * Snipcart is the long-term rail (cart + server-validated price ladder +
- * webhook → Printful), but it needs a paid plan and domain verification before
- * it can take a live payment. Gumroad / Stripe Payment Links can take money
- * today. Ship on the fast rail, flip PUBLIC_CHECKOUT_PROVIDER when approved.
+ * Three rails, one env flip (PUBLIC_CHECKOUT_PROVIDER):
+ *   gumroad   outbound payment links — takes money before any approval process
+ *   stripe    the worker's /api/checkout builds a server-priced Checkout
+ *             Session (regional tax/shipping, webhook → Printful/Printify)
+ *   snipcart  on-site cart with server-validated prices + its own webhook
  */
 
 export type Provider = 'gumroad' | 'stripe' | 'snipcart';

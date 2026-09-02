@@ -1,0 +1,255 @@
+---
+/**
+ * ProductOptions — the Mint / Print / Press selector on every piece page.
+ *
+ * The option matrix (products, sizes, colors, frames, prices) is imported
+ * straight from commerce/products.config.mjs — the same file the syndicator
+ * lists from and the worker prices against — so the PDP can never drift from
+ * what actually exists on the providers.
+ *
+ * Rails:
+ *   stripe    Buy → POST /api/checkout (server-priced Session) → redirect
+ *   snipcart  Buy button carries live data-item-* attrs, validated server-side
+ *   gumroad   flat payment links (pre-approval fast rail), note carries the id
+ */
+import { PROVIDER, API_BASE } from '../lib/checkout';
+import commerce from '../../../commerce/products.config.mjs';
+
+const { pieceId, title } = Astro.props;
+const cats = commerce.categories;
+const strip = (p: any) => ({ key: p.key, label: p.label, options: p.options, price: p.price });
+const model = {
+  pieceId,
+  title,
+  base: Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300),
+  mintBlurb: cats.mint.blurb,
+  print: cats.print.products.map(strip),
+  press: cats.press.products.map(strip),
+};
+const API = API_BASE;
+const payUrls = {
+  mint: import.meta.env.PUBLIC_PAY_URL_MINT ?? '',
+  print: import.meta.env.PUBLIC_PAY_URL_PRINT ?? '',
+  press: import.meta.env.PUBLIC_PAY_URL_PRESS ?? '',
+};
+const snip = PROVIDER === 'snipcart';
+---
+<div class="po" data-piece={pieceId}>
+  <div class="po-tabs" role="tablist" aria-label="Ways to own this piece">
+    <button class="po-tab is-active" role="tab" data-tab="mint" aria-selected="true">Mint</button>
+    <button class="po-tab" role="tab" data-tab="print" aria-selected="false">Print</button>
+    <button class="po-tab" role="tab" data-tab="press" aria-selected="false">Press</button>
+  </div>
+
+  <section class="po-panel" data-panel="mint" role="tabpanel">
+    <p class="po-blurb">{model.mintBlurb}</p>
+    <div class="po-price-row">
+      <span class="po-price" data-mint-price>${model.base}</span>
+      <span class="po-scarcity" data-scarcity hidden></span>
+    </div>
+    <button class:list={['po-buy', 'is-mint', { 'snipcart-add-item': snip }]} data-buy="mint"
+      data-item-id={pieceId} data-item-name={`${title} — Master`}
+      data-item-price={model.base.toFixed(2)} data-item-url={`${API}/api/products/${pieceId}`}
+      data-item-max-quantity="1" data-item-shippable="false">
+      Own the master
+    </button>
+    <p class="po-perk">Ships with a free garment carrying this piece's QR — scan it, and its sales credit you.</p>
+  </section>
+
+  <section class="po-panel" data-panel="print" role="tabpanel" hidden>
+    <p class="po-blurb">{cats.print.blurb}</p>
+    <div class="po-group" data-group="print-product"></div>
+    <div class="po-group" data-group="print-size"></div>
+    <div class="po-group" data-group="print-frame"></div>
+    <div class="po-price-row"><span class="po-price" data-price="print"></span></div>
+    <button class:list={['po-buy', { 'snipcart-add-item': snip }]} data-buy="print">Order the print</button>
+    <p class="po-note" data-note="print"></p>
+  </section>
+
+  <section class="po-panel" data-panel="press" role="tabpanel" hidden>
+    <p class="po-blurb">{cats.press.blurb}</p>
+    <div class="po-group" data-group="press-product"></div>
+    <div class="po-group" data-group="press-size"></div>
+    <div class="po-group" data-group="press-color"></div>
+    <div class="po-price-row"><span class="po-price" data-price="press"></span></div>
+    <button class:list={['po-buy', { 'snipcart-add-item': snip }]} data-buy="press">Wear it</button>
+    <p class="po-note" data-note="press"></p>
+  </section>
+</div>
+
+<script define:vars={{ model, API, PROVIDER, payUrls }}>
+  const root = document.querySelector(`.po[data-piece="${model.pieceId}"]`);
+  const $ = (sel) => root.querySelector(sel);
+  const pretty = (s) => /^\d+x\d+$/.test(s) ? s.replace('x', '″ × ') + '″' : s;
+  const state = {
+    print: { product: model.print[0], size: null, frame: null },
+    press: { product: model.press[0], size: null, color: null },
+  };
+  for (const cat of ['print', 'press']) {
+    const st = state[cat];
+    st.size = st.product.options.size?.[0] ?? null;
+    st.frame = st.product.options.frame?.[0] ?? null;
+    st.color = st.product.options.color?.[0] ?? null;
+  }
+
+  const itemIdFor = (cat) => `${model.pieceId}-${cat}-${state[cat].product.key}`;
+  const priceFor = (cat) => {
+    const { product, size } = state[cat];
+    return typeof product.price === 'number' ? product.price : product.price[size];
+  };
+
+  function pills(group, values, current, onPick, prettify = false) {
+    const box = $(`[data-group="${group}"]`);
+    box.innerHTML = '';
+    (values ?? []).forEach((v) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'po-pill' + (v === current ? ' is-on' : '');
+      b.textContent = prettify ? pretty(v) : v;
+      b.addEventListener('click', () => { onPick(v); render(); });
+      box.appendChild(b);
+    });
+    box.hidden = !values || !values.length;
+  }
+
+  function render() {
+    for (const cat of ['print', 'press']) {
+      const st = state[cat];
+      pills(`${cat}-product`, model[cat].map((p) => p.label),
+        st.product.label,
+        (label) => {
+          st.product = model[cat].find((p) => p.label === label);
+          st.size = st.product.options.size?.[0] ?? null;
+          st.frame = st.product.options.frame?.[0] ?? null;
+          st.color = st.product.options.color?.[0] ?? null;
+        });
+      pills(`${cat}-size`, st.product.options.size, st.size, (v) => { st.size = v; }, true);
+      if (cat === 'print') pills('print-frame', st.product.options.frame, st.frame, (v) => { st.frame = v; });
+      if (cat === 'press') pills('press-color', st.product.options.color, st.color, (v) => { st.color = v; });
+
+      $(`[data-price="${cat}"]`).textContent = `$${priceFor(cat)}`;
+      $(`[data-note="${cat}"]`).textContent = cat === 'press'
+        ? 'Printed with this piece and its unique QR code.'
+        : `${st.product.label} · whole artwork, never cropped.`;
+
+      // Keep the Snipcart attributes truthful for the current selection —
+      // the worker validates the price against the same mapping anyway.
+      const buy = $(`[data-buy="${cat}"]`);
+      const id = itemIdFor(cat);
+      buy.dataset.itemId = id;
+      buy.dataset.itemName = `${model.title} — ${st.product.label}`;
+      buy.dataset.itemPrice = Number(priceFor(cat)).toFixed(2);
+      buy.dataset.itemUrl = `${API}/api/products/${id}`;
+      let n = 1;
+      if (st.size) { buy.dataset[`itemCustom${n}Name`] = 'size'; buy.dataset[`itemCustom${n}Options`] = st.product.options.size.join('|'); buy.dataset[`itemCustom${n}Value`] = st.size; n++; }
+      if (st.color) { buy.dataset[`itemCustom${n}Name`] = 'color'; buy.dataset[`itemCustom${n}Options`] = st.product.options.color.join('|'); buy.dataset[`itemCustom${n}Value`] = st.color; }
+    }
+  }
+
+  /* tabs */
+  root.querySelectorAll('.po-tab').forEach((tab) => {
+    tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+  });
+  function selectTab(name) {
+    root.querySelectorAll('.po-tab').forEach((t) => {
+      const on = t.dataset.tab === name;
+      t.classList.toggle('is-active', on);
+      t.setAttribute('aria-selected', String(on));
+    });
+    root.querySelectorAll('.po-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });
+  }
+  const want = new URLSearchParams(location.search).get('tab') || location.hash.slice(1);
+  if (['mint', 'print', 'press'].includes(want)) selectTab(want);
+
+  /* live mint price + scarcity from the worker */
+  (async () => {
+    try {
+      const [p] = await (await fetch(`${API}/api/products/${model.pieceId}`)).json();
+      $('[data-mint-price]').textContent = `$${p.price.toFixed(0)}`;
+      const mintBuy = $('[data-buy="mint"]');
+      if (mintBuy.dataset.itemPrice) mintBuy.dataset.itemPrice = p.price.toFixed(2);
+      const s = $('[data-scarcity]');
+      s.innerHTML = `<strong>${p.remainingAtTier} left</strong> at $${p.price.toFixed(0)} — next tier $${p.nextPrice.toFixed(0)}`;
+      s.hidden = false;
+    } catch { /* API not deployed yet — config prices stand */ }
+  })();
+
+  /* buying */
+  const readRef = () => (document.cookie.match(/(?:^|;\s*)ft_ref=([\w-]+)/) ?? [])[1] ?? '';
+  root.querySelectorAll('[data-buy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const cat = btn.dataset.buy;
+      if (PROVIDER === 'snipcart') return; // snipcart.js handles the click via the attrs
+
+      if (PROVIDER === 'stripe') {
+        btn.disabled = true;
+        btn.textContent = 'Opening checkout…';
+        try {
+          const item = cat === 'mint'
+            ? { id: model.pieceId, quantity: 1 }
+            : { id: itemIdFor(cat), quantity: 1, ...(state[cat].size ? { size: state[cat].size } : {}), ...(state[cat].color ? { color: state[cat].color } : {}) };
+          const res = await fetch(`${API}/api/checkout`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include', // carries the ft_ref scan-attribution cookie
+            body: JSON.stringify({ items: [item], ref: readRef() }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.url) throw new Error(data.error ?? 'checkout failed');
+          location.href = data.url;
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Try again';
+          console.error(e);
+        }
+        return;
+      }
+
+      // Link rail (gumroad / payment links): flat price, note carries the id.
+      const url = payUrls[cat];
+      if (!url) { alert('Payment link not configured yet — set PUBLIC_PAY_URL_* in the site env.'); return; }
+      const u = new URL(url);
+      const detail = cat === 'mint' ? model.pieceId : `${itemIdFor(cat)}:${state[cat].size ?? ''}:${state[cat].color ?? ''}`;
+      u.searchParams.set('note', detail);
+      location.href = u.toString();
+    });
+  });
+
+  render();
+</script>
+
+<style>
+  .po { margin: 1.5rem 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  .po-tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .po-tab {
+    flex: 1; padding: .8rem 0; background: transparent; border: 0; cursor: pointer;
+    color: var(--dim); font: inherit; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+  }
+  .po-tab:hover { color: var(--paper); }
+  .po-tab.is-active { color: var(--paper); border-bottom-color: var(--accent); }
+  .po-panel { padding: 1.1rem 1.2rem 1.3rem; }
+  .po-blurb { color: var(--dim); margin: 0 0 .9rem; font-size: .95rem; }
+  .po-group { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0 0 .8rem; }
+  .po-group[hidden] { display: none; }
+  .po :global(.po-pill) {
+    background: transparent; color: var(--paper); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: .45rem .8rem; cursor: pointer; font: inherit; font-size: .92rem;
+    transition: border-color .15s, background .15s;
+  }
+  .po :global(.po-pill:hover) { border-color: var(--dim); }
+  .po :global(.po-pill.is-on) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .po-price-row { display: flex; align-items: baseline; gap: .8rem; margin: .4rem 0 .9rem; }
+  .po-price { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .po-scarcity { color: var(--dim); font-size: .9rem; }
+  .po-buy {
+    display: block; width: 100%; background: transparent; color: var(--paper);
+    border: 1px solid var(--paper); border-radius: var(--radius); padding: .85rem 1.2rem;
+    font: inherit; font-weight: 700; cursor: pointer; transition: transform .12s, background .15s, color .15s;
+  }
+  .po-buy:hover { transform: translateY(-1px); background: var(--paper); color: var(--ink); }
+  .po-buy.is-mint { background: var(--accent); border-color: var(--accent); color: var(--ink); }
+  .po-buy.is-mint:hover { background: var(--paper); border-color: var(--paper); }
+  .po-buy:disabled { opacity: .6; cursor: wait; transform: none; }
+  .po-perk, .po-note { color: var(--dim); font-size: .88rem; margin: .8rem 0 0; }
+</style>

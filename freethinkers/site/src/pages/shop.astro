@@ -1,0 +1,122 @@
+---
+/**
+ * /shop — the storefront view of the 365.
+ *
+ * One uniform grid, three lenses: the Mint / Print / Press chips re-price
+ * every card and point its link at the matching tab on the piece page. Prices
+ * come from commerce/products.config.mjs — the same source the syndicator and
+ * the worker use.
+ */
+import Base from '../layouts/Base.astro';
+import pieces from '../data/pieces.json';
+import commerce from '../../../commerce/products.config.mjs';
+
+const daily = (pieces as any[]).filter((p) => (p.kind ?? 'daily') === 'daily');
+const IMG = import.meta.env.PUBLIC_IMG_BASE ?? '/art-previews';
+const BASE_PRICE = Number(import.meta.env.PUBLIC_BASE_PRICE ?? 300);
+
+const minPrice = (products: any[]) =>
+  Math.min(...products.map((p) => typeof p.price === 'number' ? p.price : Math.min(...(Object.values(p.price) as number[]))));
+const from = {
+  mint: BASE_PRICE,
+  print: minPrice(commerce.categories.print.products),
+  press: minPrice(commerce.categories.press.products),
+};
+---
+<Base title="Shop — FREETHINKERS.AI" description="Own the master, hang the print, wear the QR. One piece for every day of the year.">
+  <section class="shop">
+    <header class="shop-head">
+      <h1>Mint · Print · Press</h1>
+      <p class="shop-sub">
+        Every piece can be owned three ways: the fingerprinted master, a
+        museum-grade print, or the garment that carries its QR.
+      </p>
+      <div class="shop-chips" role="tablist" aria-label="Shop category">
+        <button class="chip is-on" data-mode="all">All</button>
+        <button class="chip" data-mode="mint">Mint <span>from ${from.mint}</span></button>
+        <button class="chip" data-mode="print">Print <span>from ${from.print}</span></button>
+        <button class="chip" data-mode="press">Press <span>from ${from.press}</span></button>
+      </div>
+    </header>
+
+    {daily.length === 0 ? (
+      <div class="shop-empty">
+        <h2>The collection is being hung.</h2>
+        <p>Run the ingest pipeline (<code>scripts/ingest.mjs</code>) to publish your pieces, and this wall fills itself.</p>
+      </div>
+    ) : (
+      <div class="shop-grid" data-mode="all">
+        {daily.map((p) => (
+          <a class="shop-card" href={`/art/${p.id}`} data-base-href={`/art/${p.id}`}>
+            <span class="shop-frame">
+              <img src={`${IMG}/${p.id}.png`} alt={p.title} loading="lazy" decoding="async" />
+            </span>
+            <span class="shop-meta">
+              <span class="shop-title">{p.title}</span>
+              <span class="shop-price" data-price></span>
+            </span>
+          </a>
+        ))}
+      </div>
+    )}
+  </section>
+</Base>
+
+<script define:vars={{ from }}>
+  const grid = document.querySelector('.shop-grid');
+  const chips = document.querySelectorAll('.shop-chips .chip');
+  const labels = { all: '', mint: `Mint · $${from.mint}+`, print: `Print · $${from.print}+`, press: `Press · $${from.press}+` };
+
+  function apply(mode) {
+    chips.forEach((c) => c.classList.toggle('is-on', c.dataset.mode === mode));
+    if (!grid) return;
+    grid.dataset.mode = mode;
+    grid.querySelectorAll('.shop-card').forEach((card) => {
+      const base = card.dataset.baseHref;
+      card.href = mode === 'all' ? base : `${base}?tab=${mode}`;
+      card.querySelector('[data-price]').textContent = labels[mode];
+    });
+  }
+  chips.forEach((c) => c.addEventListener('click', () => {
+    apply(c.dataset.mode);
+    history.replaceState(null, '', c.dataset.mode === 'all' ? '/shop' : `/shop#${c.dataset.mode}`);
+  }));
+  const want = location.hash.slice(1);
+  apply(['mint', 'print', 'press'].includes(want) ? want : 'all');
+</script>
+
+<style>
+  .shop { max-width: 1200px; margin: 0 auto; padding: 2.5rem 1.2rem 4rem; }
+  .shop-head { text-align: center; margin-bottom: 2rem; }
+  .shop-head h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); letter-spacing: .04em; margin: 0 0 .6rem; }
+  .shop-sub { color: var(--dim); max-width: 46rem; margin: 0 auto 1.4rem; }
+  .shop-chips { display: flex; justify-content: center; gap: .5rem; flex-wrap: wrap; }
+  .chip {
+    background: transparent; color: var(--paper); border: 1px solid var(--line);
+    border-radius: 999px; padding: .5rem 1.1rem; font: inherit; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .chip span { color: var(--dim); font-size: .85em; margin-left: .35rem; }
+  .chip:hover { border-color: var(--dim); }
+  .chip.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .shop-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
+  .shop-card { text-decoration: none; color: var(--paper); display: block; }
+  .shop-frame {
+    display: block; aspect-ratio: 1; overflow: hidden; background: var(--panel);
+    border-radius: var(--radius);
+  }
+  .shop-frame img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform .3s ease;
+  }
+  .shop-card:hover .shop-frame img { transform: scale(1.04); }
+  .shop-meta { display: flex; justify-content: space-between; gap: .6rem; padding: .5rem .15rem 0; font-size: .88rem; }
+  .shop-title { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shop-card:hover .shop-title { color: var(--paper); }
+  .shop-price { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .shop-empty { text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); padding: 3rem 1.5rem; color: var(--dim); }
+  .shop-empty code { color: var(--paper); }
+</style>

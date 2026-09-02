@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import ProtectedArt from '../../components/ProtectedArt.astro';
-import BuyButtons from '../../components/BuyButtons.astro';
+import ProductOptions from '../../components/ProductOptions.astro';
 import PriceLadder from '../../components/PriceLadder.astro';
 import pieces from '../../data/pieces.json';
 
@@ -21,7 +21,7 @@ const { piece } = Astro.props;
       <p class="story">{piece.story}</p>
 
       <PriceLadder pieceId={piece.id} />
-      <BuyButtons pieceId={piece.id} title={piece.title} />
+      <ProductOptions pieceId={piece.id} title={piece.title} />
 
       <ul class="includes">
         <li>Full-resolution master, fingerprinted to you</li>
