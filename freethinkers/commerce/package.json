@@ -1,0 +1,18 @@
+{
+  "name": "freethinkers-commerce",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mint · Print · Press — POD syndication to Printful and Printify",
+  "scripts": {
+    "printfiles": "node syndicate/sync-products.mjs printfiles",
+    "verify": "node syndicate/sync-products.mjs verify",
+    "sync": "node syndicate/sync-products.mjs run",
+    "mappings": "node syndicate/sync-products.mjs mappings",
+    "test": "node syndicate/test-e2e.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.34.0",
+    "qrcode": "^1.5.4"
+  }
+}

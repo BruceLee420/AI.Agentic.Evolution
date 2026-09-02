@@ -16,3 +16,6 @@ ftwlabs/src/data/concepts.json
 site/public/art-previews/
 catalog.csv
 concepts-manifest.json
+commerce/synced-products.json
+commerce/fulfillment-mappings.json
+commerce/push-mappings.sh
