@@ -57,6 +57,9 @@ const PY_BLUEPRINTS = [
   // The themed decoy has a LONGER title — findBlueprint must pick id 6.
   { id: 6, title: 'Unisex Jersey Short Sleeve Tee', brand: 'Bella+Canvas', model: '3001' },
   { id: 999, title: 'Bella Canvas 3001 Glow In The Dark Themed Special Edition Tee', brand: 'Bella+Canvas', model: '3001' },
+  // The matched cut & sew set — full-coverage cotton, sized without colours.
+  { id: 77, title: 'Unisex AOP Cut & Sew Tee', brand: 'Generic', model: 'AOP' },
+  { id: 78, title: 'All Over Print Unisex Cotton Shorts', brand: 'Generic', model: 'AOP' },
 ];
 
 const PY_VARIANTS = [];
@@ -70,6 +73,20 @@ const PY_VARIANTS = [];
         placeholders: [{ position: 'front', width: 3852, height: 4398 }],
       });
     }
+  }
+}
+
+// Cut & sew variants carry no colour (the print IS the colour) and a much
+// larger print area, which is what makes the fit math worth checking here.
+const PY_AOP_VARIANTS = [];
+{
+  let id = 7701;
+  for (const size of ['XS', 'S', 'M', 'L', 'XL', '2XL']) {
+    PY_AOP_VARIANTS.push({
+      id: id++,
+      title: size,
+      placeholders: [{ position: 'front', width: 5400, height: 6600 }],
+    });
   }
 }
 
@@ -141,7 +158,8 @@ export function startMock(port = 0) {
       return send(200, [{ id: 29, title: 'Monster Digital' }]);
     }
     if ((m = path.match(/^\/catalog\/blueprints\/(\d+)\/print_providers\/(\d+)\/variants\.json$/))) {
-      return send(200, { variants: PY_VARIANTS });
+      const aop = m[1] === '77' || m[1] === '78';
+      return send(200, { variants: aop ? PY_AOP_VARIANTS : PY_VARIANTS });
     }
     if (path === '/uploads/images.json' && req.method === 'POST') {
       if (hits.py500 === 0) { // prove the 5xx retry path

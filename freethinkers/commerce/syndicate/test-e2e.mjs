@@ -110,9 +110,19 @@ console.log('\n== run ==');
 const rOut = await sync('run');
 const state = JSON.parse(await readFile(statePath, 'utf8'));
 
-check('6 printful + 2 printify listings created', () => assert.match(rOut, /8 created · 0 already synced · 1 size\(s\) refused on DPI/));
+check('6 printful + 6 printify listings created', () => assert.match(rOut, /12 created · 0 already synced · 1 size\(s\) refused on DPI/));
 check('printful got exactly 6 product creations', () => assert.equal(mock.hits.pfProducts.length, 6));
-check('printify got exactly 2 product creations', () => assert.equal(mock.hits.pyProducts.length, 2));
+check('printify got exactly 6 product creations', () => assert.equal(mock.hits.pyProducts.length, 6));
+check('AOP set resolved to cut & sew blueprints', () =>
+  assert.match(vOut, /blueprint 77 "Unisex AOP Cut & Sew Tee"/) &&
+  assert.match(vOut, /blueprint 78 "All Over Print Unisex Cotton Shorts"/));
+check('AOP set prints from its own set files, not the master', () => {
+  const tee = mock.hits.pyUploads.find((u) => u.file_name.includes('FT-TEST-001'));
+  assert.ok(tee, 'expected an upload for piece 1');
+  const urls = mock.hits.pyUploads.map((u) => u.url);
+  assert.ok(urls.some((u) => u.endsWith('FT-TEST-001-tee-aop.png')), `tee-aop file missing: ${urls}`);
+  assert.ok(urls.some((u) => u.endsWith('FT-TEST-001-shorts-aop.png')), `shorts-aop file missing: ${urls}`);
+});
 check('429 was injected and survived', () => assert.equal(mock.hits.pf429, 1));
 check('500 was injected and survived', () => assert.equal(mock.hits.py500, 1));
 
@@ -158,15 +168,15 @@ check('non-daily piece was never synced', () =>
 
 console.log('\n== rerun (idempotency) ==');
 const r2 = await sync('run');
-check('rerun creates nothing, skips all 8', () => assert.match(r2, /0 created · 8 already synced/));
+check('rerun creates nothing, skips all 12', () => assert.match(r2, /0 created · 12 already synced/));
 check('no extra provider calls on rerun', () =>
-  assert.equal(mock.hits.pfProducts.length + mock.hits.pyProducts.length, 8));
+  assert.equal(mock.hits.pfProducts.length + mock.hits.pyProducts.length, 12));
 
 /* ---------- mappings ---------- */
 
 console.log('\n== mappings ==');
 const mOut = await sync('mappings');
-check('8 mappings emitted', () => assert.match(mOut, /8 mapping\(s\)/));
+check('12 mappings emitted', () => assert.match(mOut, /12 mapping\(s\)/));
 {
   const maps = JSON.parse(await readFile(join(work, 'fulfillment-mappings.json'), 'utf8'));
   check('mapping keys carry the FULFILL: prefix', () =>

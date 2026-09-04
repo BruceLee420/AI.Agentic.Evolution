@@ -80,6 +80,31 @@ export default {
           price: 70,
           placement: 'front',
         },
+
+        /* The matched set — cut & sew cotton, printed before it's a garment,
+         * so the art runs edge to edge with no blank fabric. Print files come
+         * from make-merch-set.mjs: the tee carries the figure, the shorts
+         * carry a seamless motif built from the same piece. */
+        {
+          key: 'aop-tee',
+          label: 'All-Over Tee',
+          provider: 'printify',
+          blueprintSearch: 'AOP Cut Sew Tee',
+          fit: 'cover',
+          printFile: 'tee-aop',
+          options: { size: ['S', 'M', 'L', 'XL', '2XL'] },
+          price: 68,
+        },
+        {
+          key: 'aop-shorts',
+          label: 'All-Over Shorts',
+          provider: 'printify',
+          blueprintSearch: 'All Over Print Unisex Cotton Shorts',
+          fit: 'cover',
+          printFile: 'shorts-aop',
+          options: { size: ['S', 'M', 'L', 'XL', '2XL'] },
+          price: 62,
+        },
       ],
     },
   },

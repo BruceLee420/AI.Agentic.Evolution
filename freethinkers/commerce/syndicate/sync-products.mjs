@@ -186,7 +186,13 @@ async function run() {
       if (state[prod.provider]?.[id]) { skipped++; continue; }
 
       const r = await resolveProduct(prod);
-      const artUrl = `${config.fileBase}/${prod.useQrComposite ? `${piece.id}.press.png` : `${piece.id}.png`}`;
+      // Which print file this product prints from: a cut & sew set file
+      // (make-merch-set.mjs), the QR press composite, or the plain master.
+      const artUrl = `${config.fileBase}/${
+        prod.printFile ? `${piece.id}-${prod.printFile}.png`
+        : prod.useQrComposite ? `${piece.id}.press.png`
+        : `${piece.id}.png`
+      }`;
       const title = `${piece.title} — ${prod.label}`;
 
       try {
